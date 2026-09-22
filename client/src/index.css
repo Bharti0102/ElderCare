@@ -1,0 +1,30 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Outfit', system-ui, -apple-system, sans-serif;
+  }
+}
+
+/* Elderly-friendly high-legibility utilities */
+.elder-card {
+  @apply bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all duration-200;
+}
+
+.elder-btn {
+  @apply inline-flex items-center justify-center font-semibold text-lg px-6 py-3.5 rounded-xl shadow-sm transition-all duration-150 focus:outline-none focus:ring-4;
+}
+
+.elder-btn-primary {
+  @apply elder-btn bg-brand-600 text-white hover:bg-brand-700 focus:ring-brand-200 active:scale-[0.98];
+}
+
+.elder-btn-secondary {
+  @apply elder-btn bg-white text-slate-800 border-2 border-slate-200 hover:bg-slate-50 hover:border-slate-300 focus:ring-slate-200 active:scale-[0.98];
+}

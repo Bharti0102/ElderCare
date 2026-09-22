@@ -1,0 +1,25 @@
+{
+  "name": "eldercare-ai",
+  "version": "0.1.0",
+  "description": "ElderCare AI — Voice-First AI Care Coordinator for Elderly Users",
+  "private": true,
+  "scripts": {
+    "server:dev": "npm --prefix server run dev",
+    "client:dev": "npm --prefix client run dev",
+    "server:build": "npm --prefix server run build",
+    "client:build": "npm --prefix client run build",
+    "server:typecheck": "npm --prefix server run typecheck",
+    "client:typecheck": "npm --prefix client run typecheck",
+    "typecheck": "npm run server:typecheck && npm run client:typecheck",
+    "build": "npm run server:build && npm run client:build"
+  },
+  "keywords": [
+    "eldercare",
+    "ai",
+    "voice-assistant",
+    "healthcare",
+    "accessibility"
+  ],
+  "author": "ElderCare AI Team",
+  "license": "MIT"
+}
