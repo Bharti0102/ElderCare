@@ -181,3 +181,58 @@ export interface InitiateCallDTO {
   name?: string;
   message?: string;
 }
+
+export type AppointmentStatus =
+  | 'PROPOSED'
+  | 'PENDING_CONFIRMATION'
+  | 'CONFIRMED'
+  | 'CANCELLED'
+  | 'COMPLETED';
+
+export type AppointmentSource = 'AI_CALL' | 'HUMAN_CALL' | 'MANUAL';
+
+export interface Appointment {
+  _id: string;
+  userId: string;
+  prescriptionId?: string;
+  callId?: string;
+  hospital: string;
+  doctor?: string;
+  department?: string;
+  receptionPhone: string;
+  requestedDate: string;
+  requestedTime: string;
+  status: AppointmentStatus;
+  source: AppointmentSource;
+  aiTranscript?: string;
+  aiNotes?: string;
+  patientNotes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface InitiateHospitalCallDTO {
+  prescriptionId?: string;
+  hospital: string;
+  doctor?: string;
+  department?: string;
+  receptionPhone: string;
+  preferredDate?: string;
+  preferredTime?: string;
+  patientNotes?: string;
+}
+
+export interface HospitalCallResponse {
+  call: Call;
+  appointment?: Appointment;
+  mode: 'HUMAN_CALL' | 'AI_CALL';
+  aiTranscript?: string;
+  summary: string;
+}
+
+export interface HospitalTarget {
+  hospital: string;
+  doctor?: string;
+  receptionPhone: string;
+  prescriptionId?: string;
+}

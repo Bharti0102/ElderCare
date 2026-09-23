@@ -1,6 +1,6 @@
 # ElderCare AI — Project Status
 
-## Overall Status: Phase 5 Completed
+## Overall Status: Phase 6 Completed
 
 | Phase | Description | Status | Completion Date |
 |-------|-------------|--------|-----------------|
@@ -10,9 +10,25 @@
 | **Phase 3** | Reminder Agent (Natural Language Reminders, Scheduler) | **Completed** | 2026-09-23 |
 | **Phase 4** | Prescription Intelligence (Upload, OCR/Vision, Validation) | **Completed** | 2026-09-23 |
 | **Phase 5** | Caregiver Calling (Calling Tool, Telephony Abstraction) | **Completed** | 2026-09-23 |
-| **Phase 6** | Hospital Calling + Appointment Assistance | **Next in Queue** | — |
-| **Phase 7** | Voice Pipeline (STT, TTS, Voice-first interaction) | Planned | — |
+| **Phase 6** | Hospital Calling + Appointment Assistance | **Completed** | 2026-09-23 |
+| **Phase 7** | Voice Pipeline (STT, TTS, Voice-first interaction) | **Next in Queue** | — |
 | **Phase 8** | Integration, Accessibility & Final Polish | Planned | — |
+
+---
+
+## Phase 6 Checklist
+- [x] Appointment Mongoose model (`Appointment.ts`) recording `userId`, `prescriptionId`, `callId`, `hospital`, `doctor`, `department`, `receptionPhone`, `requestedDate`, `requestedTime`, `status`, `source`, `aiTranscript`, `aiNotes`, and `patientNotes`
+- [x] Prescription-to-Hospital Connection: automatically extracts hospital name, doctor, and reception phone number from verified prescriptions
+- [x] Dual Calling Modes: Mode A (Direct line assisting user to call reception) and Mode B (Autonomous AI calling agent calling reception)
+- [x] Strict Non-Impersonation Invariant: AI agent identifies itself as *"ElderCare AI calling on behalf of patient [Name]"* and never impersonates the patient
+- [x] Strict Non-Hallucination & Human-in-the-Loop Confirmation: No appointment is booked without user review; slots are presented with explicit "Confirm Appointment" / "Decline"
+- [x] Hospital service (`hospital.service.ts`) managing hospital resolution, Mode A/B call workflows, confirmation, cancellation, and retrieval
+- [x] AI Tool (`hospital.tool.ts`) integrated into `OrchestratorService` responding to conversational hospital & appointment requests
+- [x] Authenticated REST API: `POST /api/appointments/call/human`, `POST /api/appointments/call/ai`, `GET /api/appointments`, `GET /api/appointments/:id`, `POST /api/appointments/:id/confirm`, `POST /api/appointments/:id/cancel`, `GET /api/appointments/target`
+- [x] Elderly-accessible UI: Dedicated Hospital & Appointment Assistant tab on Calls page, dual mode selector cards, verified AI calling transcript viewer, appointment proposal review banner, and scheduled visits calendar
+- [x] Seamless bridge on `Prescription.tsx`: "Book Follow-up / Call Clinic" button linking directly with pre-filled doctor and hospital data
+- [x] End-to-end automated verification suite passing 26/26 assertions with 100% pass rate
+- [x] Zero regressions across Phase 1, Phase 2, Phase 3, Phase 4, and Phase 5 suites (116 total assertions passed)
 
 ---
 

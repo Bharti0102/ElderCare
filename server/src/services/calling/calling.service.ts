@@ -43,6 +43,42 @@ export class CallingService {
   }
 
   /**
+   * Initiates a direct call (e.g. to verified hospital reception)
+   */
+  public static async initiateCallDirect(
+    userId: string,
+    params: {
+      contactName: string;
+      relationship: string;
+      phoneNumber: string;
+      type: 'CAREGIVER' | 'HOSPITAL';
+      notes?: string;
+    }
+  ): Promise<ICall> {
+    const telephony = TelephonyFactory.getProvider();
+    const result = await telephony.initiateCall({
+      to: params.phoneNumber,
+      contactName: params.contactName,
+      relationship: params.relationship,
+      userMessage: params.notes,
+    });
+
+    const call = await Call.create({
+      userId,
+      contactName: params.contactName,
+      relationship: params.relationship,
+      phoneNumber: params.phoneNumber,
+      type: params.type,
+      providerCallId: result.providerCallId,
+      status: result.status,
+      startedAt: result.startedAt,
+      notes: params.notes || `${params.type} call initiated`,
+    });
+
+    return call;
+  }
+
+  /**
    * Get call history for user.
    */
   public static async getCalls(
@@ -89,27 +125,46 @@ export class CallingService {
   }
 
   /**
-   * Update call status manually or from webhook.
+   * Update call status manually or from webhook / AI service.
    */
   public static async updateCallStatus(
-    userId: string,
-    callId: string,
-    status: CallStatus,
+    callIdOrUserId: string,
+    callIdOrStatus: string | CallStatus,
+    statusOrOptions?: CallStatus | { durationSeconds?: number; notes?: string },
     durationSeconds?: number,
     notes?: string
   ): Promise<ICall> {
-    const call = await Call.findOne({ _id: callId, userId });
+    let call: ICall | null = null;
+    let newStatus: CallStatus;
+    let dur = durationSeconds;
+    let note = notes;
+
+    if (typeof statusOrOptions === 'object') {
+      // Called as: updateCallStatus(callId, 'COMPLETED', { notes: '...' })
+      call = await Call.findById(callIdOrUserId);
+      newStatus = callIdOrStatus as CallStatus;
+      dur = statusOrOptions.durationSeconds;
+      note = statusOrOptions.notes;
+    } else if (statusOrOptions) {
+      // Called as: updateCallStatus(userId, callId, status, duration, notes)
+      call = await Call.findOne({ _id: callIdOrStatus, userId: callIdOrUserId });
+      newStatus = statusOrOptions as CallStatus;
+    } else {
+      call = await Call.findById(callIdOrUserId);
+      newStatus = callIdOrStatus as CallStatus;
+    }
+
     if (!call) {
       throw new AppError('Call record not found', 404, 'NOT_FOUND');
     }
 
-    call.status = status;
-    if (notes) call.notes = notes;
-    if (durationSeconds !== undefined) {
-      call.durationSeconds = durationSeconds;
+    call.status = newStatus;
+    if (note) call.notes = note;
+    if (dur !== undefined) {
+      call.durationSeconds = dur;
     }
 
-    if (status === 'COMPLETED' || status === 'FAILED' || status === 'CANCELLED') {
+    if (newStatus === 'COMPLETED' || newStatus === 'FAILED' || newStatus === 'CANCELLED') {
       call.endedAt = new Date();
       if (!call.durationSeconds && call.startedAt) {
         call.durationSeconds = Math.max(

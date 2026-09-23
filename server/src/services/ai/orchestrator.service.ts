@@ -3,6 +3,7 @@ import { ChatTool } from './tools/chat.tool';
 import { ReminderTool } from './tools/reminder.tool';
 import { PrescriptionTool } from './tools/prescription.tool';
 import { CallingTool } from './tools/calling.tool';
+import { HospitalTool } from './tools/hospital.tool';
 import { ChatService } from '../chat/chat.service';
 import { KnownIntent } from '../../integrations/llm/llm.interface';
 
@@ -19,6 +20,7 @@ export class OrchestratorService {
   private static reminderTool = new ReminderTool();
   private static prescriptionTool = new PrescriptionTool();
   private static callingTool = new CallingTool();
+  private static hospitalTool = new HospitalTool();
 
   public static async processMessage(
     userId: string,
@@ -88,15 +90,15 @@ export class OrchestratorService {
       }
 
       case 'HOSPITAL_CALL': {
-        const previewReply =
-          '🏥 I understand you wish to contact a hospital or schedule an appointment. Autonomous and assisted hospital calling will be available in Phase 6.';
         await ChatService.addMessage(userId, 'user', trimmedInput, 'HOSPITAL_CALL');
-        await ChatService.addMessage(userId, 'assistant', previewReply, 'HOSPITAL_CALL');
+        const toolResult = await this.hospitalTool.execute(userId, { message: trimmedInput });
+        await ChatService.addMessage(userId, 'assistant', toolResult.message, 'HOSPITAL_CALL');
         return {
-          reply: previewReply,
+          reply: toolResult.message,
           intent: 'HOSPITAL_CALL',
           confidence: intentResult.confidence,
-          suggestions: ['View Calls tab', 'Who is my doctor?', 'Tell me a story'],
+          toolResults: [toolResult],
+          suggestions: toolResult.suggestions || ['Confirm this appointment', 'View Calls tab', 'Tell me a story'],
         };
       }
 

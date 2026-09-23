@@ -12,38 +12,77 @@ import {
   MessageSquare,
   Building2,
   Radio,
+  Calendar,
+  CheckCircle2,
+  Bot,
+  User,
+  Check,
+  X,
+  FileText,
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   initiateCaregiverCall,
   getCalls,
   hangupCall,
 } from '../services/calling.service';
 import { getContacts } from '../services/contact.service';
+import {
+  initiateHumanHospitalCall,
+  initiateAIHospitalCall,
+  getAppointments,
+  confirmAppointment,
+  cancelAppointment,
+  getHospitalTarget,
+} from '../services/appointment.service';
 import { speakText, playReminderChime } from '../services/voiceNotification.service';
-import { Call, EmergencyContact } from '../types';
+import { Call, EmergencyContact, Appointment, HospitalCallResponse } from '../types';
 
 export const Calls: React.FC = () => {
+  const [searchParams] = useSearchParams();
+  const initialTab = searchParams.get('tab') === 'hospital' ? 'hospital' : 'caregiver';
+
+  const [activeTab, setActiveTab] = useState<'caregiver' | 'hospital'>(initialTab);
   const [contacts, setContacts] = useState<EmergencyContact[]>([]);
   const [calls, setCalls] = useState<Call[]>([]);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  // Active in-call state
+  // Active in-call state (for caregiver or direct hospital call)
   const [activeCall, setActiveCall] = useState<Call | null>(null);
   const [callDuration, setCallDuration] = useState(0);
   const [isDialing, setIsDialing] = useState(false);
+
+  // Hospital form & AI calling state
+  const [hospitalName, setHospitalName] = useState('Metropolitan Community Health Center');
+  const [doctorName, setDoctorName] = useState('Dr. Sarah Mitchell, MD');
+  const [department, setDepartment] = useState('Cardiology & Internal Medicine');
+  const [receptionPhone, setReceptionPhone] = useState('+1-555-019-4820');
+  const [preferredDate, setPreferredDate] = useState(
+    new Date(Date.now() + 86400000).toISOString().split('T')[0]
+  );
+  const [preferredTime, setPreferredTime] = useState('10:30 AM');
+  const [patientNotes, setPatientNotes] = useState('Follow-up review for blood pressure medication');
+
+  // AI calling result / transcript state
+  const [aiCallResult, setAiCallResult] = useState<HospitalCallResponse | null>(null);
+  const [isAiCalling, setIsAiCalling] = useState(false);
+  const [isConfirmingAppointment, setIsConfirmingAppointment] = useState(false);
 
   const fetchData = async () => {
     try {
       setLoading(true);
       setError(null);
-      const [contactList, callList] = await Promise.all([
+      const [contactList, callList, apptList] = await Promise.all([
         getContacts(),
         getCalls(),
+        getAppointments(),
       ]);
       setContacts(contactList);
       setCalls(callList);
+      setAppointments(apptList);
 
       // Check if there is an active ongoing call
       const ongoing = callList.find(
@@ -58,6 +97,22 @@ export const Calls: React.FC = () => {
       setLoading(false);
     }
   };
+
+  // Try auto-resolving target from prescription if available
+  useEffect(() => {
+    const rxId = searchParams.get('rxId');
+    getHospitalTarget(rxId || undefined)
+      .then((target) => {
+        if (target) {
+          if (target.hospital) setHospitalName(target.hospital);
+          if (target.doctor) setDoctorName(target.doctor);
+          if (target.receptionPhone) setReceptionPhone(target.receptionPhone);
+        }
+      })
+      .catch(() => {
+        // keep defaults
+      });
+  }, [searchParams]);
 
   useEffect(() => {
     fetchData();
@@ -79,7 +134,7 @@ export const Calls: React.FC = () => {
     };
   }, [activeCall]);
 
-  const handleStartCall = async (contact: EmergencyContact) => {
+  const handleStartCaregiverCall = async (contact: EmergencyContact) => {
     try {
       setIsDialing(true);
       setError(null);
@@ -115,6 +170,98 @@ export const Calls: React.FC = () => {
     }
   };
 
+  // Mode A: Direct User Call to Hospital
+  const handleStartDirectHospitalCall = async () => {
+    try {
+      setIsDialing(true);
+      setError(null);
+      playReminderChime();
+      speakText(`Connecting direct call to ${hospitalName} reception.`);
+
+      const res = await initiateHumanHospitalCall({
+        hospital: hospitalName,
+        doctor: doctorName,
+        department,
+        receptionPhone,
+        preferredDate,
+        preferredTime,
+        patientNotes,
+      });
+
+      setActiveCall(res.call);
+      setCallDuration(0);
+      setSuccessMsg(`Direct call connected to ${hospitalName} reception.`);
+      await fetchData();
+    } catch (err: any) {
+      setError(err.message || 'Failed to connect to hospital reception');
+    } finally {
+      setIsDialing(false);
+    }
+  };
+
+  // Mode B: AI Calling Agent Calls Reception
+  const handleStartAIHospitalCall = async () => {
+    try {
+      setIsAiCalling(true);
+      setError(null);
+      setAiCallResult(null);
+      playReminderChime();
+      speakText(`ElderCare AI is calling ${hospitalName} reception to check available appointments.`);
+
+      const res = await initiateAIHospitalCall({
+        hospital: hospitalName,
+        doctor: doctorName,
+        department,
+        receptionPhone,
+        preferredDate,
+        preferredTime,
+        patientNotes,
+      });
+
+      setAiCallResult(res);
+      setSuccessMsg(`AI appointment inquiry completed! Proposed slot found.`);
+      speakText(`Appointment found on ${preferredDate} at ${preferredTime}. Please review and confirm.`);
+      await fetchData();
+    } catch (err: any) {
+      setError(err.message || 'AI hospital calling inquiry failed');
+    } finally {
+      setIsAiCalling(false);
+    }
+  };
+
+  // Confirm appointment proposal
+  const handleConfirmAppointment = async (apptId: string) => {
+    try {
+      setIsConfirmingAppointment(true);
+      setError(null);
+      playReminderChime();
+      await confirmAppointment(apptId, patientNotes);
+      setSuccessMsg('Appointment successfully confirmed and added to your schedule!');
+      speakText('Your appointment is confirmed. We will remind you beforehand.');
+      setAiCallResult(null);
+      await fetchData();
+      setTimeout(() => setSuccessMsg(null), 5000);
+    } catch (err: any) {
+      setError(err.message || 'Failed to confirm appointment');
+    } finally {
+      setIsConfirmingAppointment(false);
+    }
+  };
+
+  // Cancel appointment proposal
+  const handleCancelAppointment = async (apptId: string) => {
+    if (!window.confirm('Are you sure you want to cancel this appointment?')) return;
+    try {
+      await cancelAppointment(apptId, 'Patient requested cancellation');
+      setSuccessMsg('Appointment cancelled.');
+      setAiCallResult(null);
+      await fetchData();
+      setTimeout(() => setSuccessMsg(null), 4000);
+    } catch (err: any) {
+      setError(err.message || 'Failed to cancel appointment');
+    }
+  };
+
   const formatSeconds = (sec: number) => {
     const mins = Math.floor(sec / 60);
     const secs = sec % 60;
@@ -124,12 +271,16 @@ export const Calls: React.FC = () => {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'CONNECTED':
+      case 'CONFIRMED':
         return 'bg-emerald-100 text-emerald-800 border-emerald-300';
       case 'CALLING':
+      case 'PENDING_CONFIRMATION':
+      case 'PROPOSED':
         return 'bg-amber-100 text-amber-800 border-amber-300 animate-pulse';
       case 'COMPLETED':
         return 'bg-slate-100 text-slate-700 border-slate-300';
       case 'FAILED':
+      case 'CANCELLED':
         return 'bg-rose-100 text-rose-800 border-rose-300';
       default:
         return 'bg-sky-100 text-sky-800 border-sky-300';
@@ -143,13 +294,13 @@ export const Calls: React.FC = () => {
         <div>
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 text-xs font-semibold border border-emerald-200 mb-2">
             <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-            Phase 5: Active & Operational
+            Phase 6: Hospital & Caregiver Telephony Active
           </div>
           <h1 className="text-3xl font-extrabold text-slate-900">
-            Caregiver & Emergency Calling
+            Care Coordinator Calling & Appointments
           </h1>
           <p className="text-slate-600 mt-1">
-            Directly dial your verified family caregiver, daughter, son, or doctor with one tap or natural voice command.
+            Place verified caregiver calls or let the AI Assistant contact hospital reception to discover and book doctor visits.
           </p>
         </div>
 
@@ -163,24 +314,63 @@ export const Calls: React.FC = () => {
             <span>Call via AI Chat</span>
           </Link>
           <Link
-            to="/profile"
-            className="elder-btn-primary flex items-center gap-1.5 shadow-md shadow-brand-500/20 text-sm"
+            to="/prescription"
+            className="elder-btn-secondary text-sm flex items-center gap-1.5"
+            title="View Prescriptions"
           >
-            <UserCheck className="w-4 h-4" />
-            <span>Manage Contacts</span>
+            <FileText className="w-4 h-4 text-brand-600" />
+            <span>Prescriptions</span>
           </Link>
         </div>
       </div>
 
+      {/* Tabs: Caregiver Calling vs Hospital Calling */}
+      <div className="flex border-b border-slate-200 gap-4">
+        <button
+          onClick={() => setActiveTab('caregiver')}
+          className={`pb-3 px-2 font-bold text-base flex items-center gap-2 border-b-2 transition-colors ${
+            activeTab === 'caregiver'
+              ? 'border-brand-600 text-brand-600'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <UserCheck className="w-5 h-5" />
+          <span>Caregiver Calling (Phase 5)</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('hospital')}
+          className={`pb-3 px-2 font-bold text-base flex items-center gap-2 border-b-2 transition-colors ${
+            activeTab === 'hospital'
+              ? 'border-brand-600 text-brand-600'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <Building2 className="w-5 h-5" />
+          <span>Hospital Calling & Appointments (Phase 6)</span>
+          <span className="px-2 py-0.5 text-xs font-extrabold bg-brand-100 text-brand-700 rounded-full">
+            New
+          </span>
+        </button>
+      </div>
+
+      {/* Success Notification */}
+      {successMsg && (
+        <div className="p-4 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-2xl flex items-center gap-2 animate-in fade-in">
+          <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+          <span className="font-semibold text-sm">{successMsg}</span>
+        </div>
+      )}
+
       {/* Error Banner */}
       {error && (
-        <div className="p-4 bg-rose-50 text-rose-700 border border-rose-200 rounded-2xl flex items-center gap-2">
+        <div className="p-4 bg-rose-50 text-rose-700 border border-rose-200 rounded-2xl flex items-center gap-2 animate-in fade-in">
           <AlertCircle className="w-5 h-5 flex-shrink-0" />
           <span>{error}</span>
         </div>
       )}
 
-      {/* Active Call In-Progress Overlay Banner */}
+      {/* Active Call In-Progress Overlay Banner (Shared for Caregiver or Direct Hospital) */}
       {activeCall && (
         <div className="elder-card p-6 sm:p-8 bg-gradient-to-r from-emerald-600 via-teal-700 to-indigo-900 text-white shadow-2xl relative overflow-hidden animate-in fade-in zoom-in-95 duration-200">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 relative z-10">
@@ -198,15 +388,24 @@ export const Calls: React.FC = () => {
                   {activeCall.contactName} ({activeCall.relationship})
                 </h2>
                 <p className="text-sky-100 text-sm font-mono">
-                  {activeCall.phoneNumber} • Duration: <span className="font-bold text-white text-base">{formatSeconds(callDuration)}</span>
+                  Line: {activeCall.phoneNumber} • Type: {activeCall.type}
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-3 self-end sm:self-center">
+            <div className="flex items-center gap-4 sm:gap-6 self-end sm:self-center">
+              <div className="text-right">
+                <span className="text-xs uppercase tracking-wider text-emerald-200 block font-bold">
+                  Duration
+                </span>
+                <span className="text-3xl sm:text-4xl font-mono font-black text-white">
+                  {formatSeconds(callDuration)}
+                </span>
+              </div>
+
               <button
                 onClick={handleEndCall}
-                className="px-6 py-3.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-extrabold rounded-2xl flex items-center gap-2 shadow-lg shadow-rose-900/40 transition-all text-base"
+                className="px-6 py-4 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-base shadow-lg shadow-rose-900/30 flex items-center gap-2 transition-transform active:scale-95"
               >
                 <PhoneOff className="w-5 h-5" />
                 <span>End Call</span>
@@ -216,128 +415,448 @@ export const Calls: React.FC = () => {
         </div>
       )}
 
-      {/* Voice Prompt Pro-Tip */}
-      <div className="p-4 bg-sky-50 rounded-2xl border border-sky-200 flex items-start gap-3">
-        <Sparkles className="w-5 h-5 text-sky-600 mt-0.5 flex-shrink-0" />
-        <div className="text-sm text-sky-900">
-          <span className="font-bold">Natural Voice Calling: </span>
-          You can tell the AI Companion in Chat:
-          <span className="italic font-medium text-sky-950 ml-1">
-            "Call my daughter"
-          </span>{' '}
-          or{' '}
-          <span className="italic font-medium text-sky-950">
-            "Call my doctor"
-          </span>
-          — and it will automatically resolve your verified contact and place the call without dialing manually!
-        </div>
-      </div>
+      {/* TAB 1: Caregiver Calling */}
+      {activeTab === 'caregiver' && (
+        <div className="space-y-8 animate-in fade-in duration-200">
+          {/* Caregiver Quick-Dial Grid */}
+          <section className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
+                  <UserCheck className="w-6 h-6 text-brand-600" />
+                  Family Caregiver Quick-Dial
+                </h2>
+                <p className="text-sm text-slate-500">
+                  Calls resolve strictly from your verified Emergency Contacts. Numbers are protected and never forged.
+                </p>
+              </div>
 
-      {/* Caregiver Quick-Dial Grid */}
-      <section className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
-            <UserCheck className="w-6 h-6 text-brand-600" />
-            Verified Caregivers & Emergency Contacts
-          </h2>
-          <span className="text-xs text-slate-500">Configured in Profile</span>
-        </div>
-
-        {loading && contacts.length === 0 ? (
-          <div className="text-center py-12">
-            <RotateCw className="w-8 h-8 text-brand-500 animate-spin mx-auto mb-2" />
-            <p className="text-slate-500">Loading your emergency contacts...</p>
-          </div>
-        ) : contacts.length === 0 ? (
-          <div className="elder-card p-10 text-center space-y-4">
-            <div className="w-16 h-16 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center mx-auto">
-              <Phone className="w-8 h-8" />
+              <Link to="/profile" className="text-sm font-bold text-brand-600 hover:underline">
+                Add Contacts →
+              </Link>
             </div>
-            <div className="space-y-1">
-              <h3 className="text-lg font-bold text-slate-900">No Emergency Contacts Registered</h3>
-              <p className="text-slate-500 text-sm max-w-md mx-auto">
-                Before you can place direct calls, please add your daughter, son, or doctor in your Profile.
+
+            {loading && contacts.length === 0 ? (
+              <div className="text-center py-12">
+                <RotateCw className="w-8 h-8 text-brand-500 animate-spin mx-auto mb-2" />
+                <p className="text-slate-500 text-sm">Loading caregivers...</p>
+              </div>
+            ) : contacts.length === 0 ? (
+              <div className="elder-card p-8 text-center bg-brand-50/50 border-brand-200 space-y-4">
+                <div className="w-12 h-12 rounded-full bg-brand-100 text-brand-600 flex items-center justify-center mx-auto">
+                  <UserCheck className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900">No Emergency Contacts Configured</h3>
+                  <p className="text-sm text-slate-600 max-w-md mx-auto mt-1">
+                    To enable Caregiver Calling, please register your daughter, son, or designated doctor in your Profile.
+                  </p>
+                </div>
+                <Link to="/profile" className="elder-btn-primary inline-flex items-center gap-2">
+                  <UserCheck className="w-4 h-4" />
+                  <span>Configure Emergency Contacts</span>
+                </Link>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {contacts.map((contact) => (
+                  <div
+                    key={contact._id}
+                    className={`elder-card p-6 flex flex-col justify-between transition-all hover:shadow-xl ${
+                      contact.isPrimary
+                        ? 'border-2 border-emerald-400 bg-emerald-50/20'
+                        : 'border border-slate-200'
+                    }`}
+                  >
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700">
+                          {contact.relationship}
+                        </span>
+                        {contact.isPrimary && (
+                          <span className="inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                            <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                            Primary Caregiver
+                          </span>
+                        )}
+                      </div>
+
+                      <div>
+                        <h3 className="text-xl font-extrabold text-slate-900">{contact.name}</h3>
+                        <p className="text-slate-500 font-mono text-sm mt-0.5">{contact.phone}</p>
+                      </div>
+                    </div>
+
+                    <div className="pt-6 border-t border-slate-100 mt-4">
+                      <button
+                        onClick={() => handleStartCaregiverCall(contact)}
+                        disabled={isDialing || !!activeCall}
+                        className={`w-full py-3.5 px-4 rounded-2xl font-extrabold text-base flex items-center justify-center gap-2 transition-all active:scale-95 shadow-md ${
+                          contact.isPrimary
+                            ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/25'
+                            : 'bg-brand-600 hover:bg-brand-700 text-white shadow-brand-600/25'
+                        } disabled:opacity-50`}
+                      >
+                        <Phone className="w-5 h-5" />
+                        <span>Call {contact.name.split(' ')[0]}</span>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+      )}
+
+      {/* TAB 2: Hospital Calling & Appointment Assistance (Phase 6) */}
+      {activeTab === 'hospital' && (
+        <div className="space-y-8 animate-in fade-in duration-200">
+          {/* Dual-Mode Selector Card */}
+          <div className="elder-card p-6 sm:p-8 bg-white border border-slate-200 shadow-md space-y-6">
+            <div>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-sky-50 text-sky-800 text-xs font-bold border border-sky-200 mb-2">
+                <Building2 className="w-3.5 h-3.5 text-sky-600" />
+                Dual-Mode Hospital Calling Protocol
+              </div>
+              <h2 className="text-2xl font-black text-slate-900">
+                Hospital Calling & Scheduling Assistant
+              </h2>
+              <p className="text-slate-600 text-sm mt-1 max-w-3xl">
+                Choose between <strong>Mode B (AI Calling Agent)</strong> who autonomously calls reception, introduces itself as an AI, inquires about availability, and presents proposed slots; or <strong>Mode A (Direct Call)</strong> to speak with reception yourself.
               </p>
             </div>
-            <Link to="/profile" className="elder-btn-primary inline-flex items-center gap-2">
-              <UserCheck className="w-4 h-4" />
-              <span>Add Caregiver in Profile</span>
-            </Link>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {contacts.map((contact) => (
-              <div
-                key={contact._id}
-                className="elder-card p-6 flex flex-col justify-between border-l-4 border-l-brand-600 hover:shadow-lg transition-all bg-white"
-              >
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider bg-brand-50 text-brand-700 border border-brand-200">
-                      {contact.relationship}
-                    </span>
-                    {contact.isPrimary && (
-                      <span className="text-xs px-2.5 py-0.5 rounded-full font-bold bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1">
-                        <ShieldCheck className="w-3 h-3" />
-                        Primary Caregiver
-                      </span>
-                    )}
-                  </div>
 
-                  <div>
-                    <h3 className="text-xl font-bold text-slate-900">{contact.name}</h3>
-                    <p className="text-sm font-mono text-slate-500 mt-0.5">{contact.phone}</p>
+            {/* Hospital Contact & Preference Form */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-5 bg-slate-50/80 rounded-2xl border border-slate-200/80">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
+                  Hospital / Clinic Name
+                </label>
+                <input
+                  type="text"
+                  value={hospitalName}
+                  onChange={(e) => setHospitalName(e.target.value)}
+                  className="elder-input text-sm"
+                  placeholder="e.g. City General Hospital"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
+                  Doctor or Specialty
+                </label>
+                <input
+                  type="text"
+                  value={doctorName}
+                  onChange={(e) => setDoctorName(e.target.value)}
+                  className="elder-input text-sm"
+                  placeholder="e.g. Dr. Sarah Mitchell"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
+                  Reception Phone Number
+                </label>
+                <input
+                  type="text"
+                  value={receptionPhone}
+                  onChange={(e) => setReceptionPhone(e.target.value)}
+                  className="elder-input text-sm font-mono"
+                  placeholder="e.g. +1-555-019-4820"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
+                  Department
+                </label>
+                <input
+                  type="text"
+                  value={department}
+                  onChange={(e) => setDepartment(e.target.value)}
+                  className="elder-input text-sm"
+                  placeholder="e.g. Cardiology"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
+                  Preferred Date
+                </label>
+                <input
+                  type="date"
+                  value={preferredDate}
+                  onChange={(e) => setPreferredDate(e.target.value)}
+                  className="elder-input text-sm font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
+                  Preferred Time Slot
+                </label>
+                <input
+                  type="text"
+                  value={preferredTime}
+                  onChange={(e) => setPreferredTime(e.target.value)}
+                  className="elder-input text-sm font-mono"
+                  placeholder="e.g. 10:30 AM"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
+                  Reason for Visit / Patient Notes
+                </label>
+                <input
+                  type="text"
+                  value={patientNotes}
+                  onChange={(e) => setPatientNotes(e.target.value)}
+                  className="elder-input text-sm"
+                  placeholder="e.g. Follow-up consultation on prescription"
+                />
+              </div>
+            </div>
+
+            {/* Calling Mode Buttons */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+              {/* Mode B: AI Assistant Call */}
+              <div className="p-5 rounded-2xl border-2 border-brand-200 bg-brand-50/30 flex flex-col justify-between space-y-4">
+                <div>
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-brand-100 text-brand-800 text-xs font-extrabold mb-1">
+                    <Bot className="w-3.5 h-3.5" />
+                    Mode B: Autonomous AI Calling (Recommended)
                   </div>
+                  <h3 className="text-lg font-bold text-slate-900">Let AI Call Reception</h3>
+                  <p className="text-xs text-slate-600 mt-1">
+                    AI agent calls reception, introduces itself, discovers open appointment slots for your doctor, and brings back a booking proposal for your approval.
+                  </p>
                 </div>
 
-                <div className="mt-6 pt-4 border-t border-slate-100">
+                <button
+                  onClick={handleStartAIHospitalCall}
+                  disabled={isAiCalling || !!activeCall}
+                  className="w-full py-3 px-4 bg-brand-600 hover:bg-brand-700 text-white font-extrabold text-sm rounded-xl flex items-center justify-center gap-2 shadow-md shadow-brand-600/25 transition-all active:scale-95 disabled:opacity-50"
+                >
+                  <Bot className="w-4 h-4" />
+                  <span>{isAiCalling ? 'AI Contacting Reception...' : 'Start AI Booking Call'}</span>
+                </button>
+              </div>
+
+              {/* Mode A: Direct Call */}
+              <div className="p-5 rounded-2xl border border-slate-200 bg-white flex flex-col justify-between space-y-4">
+                <div>
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 text-xs font-bold mb-1">
+                    <User className="w-3.5 h-3.5" />
+                    Mode A: User Direct Line
+                  </div>
+                  <h3 className="text-lg font-bold text-slate-900">Direct Call to Reception</h3>
+                  <p className="text-xs text-slate-600 mt-1">
+                    Connects your telephone line directly to the hospital scheduling desk so you can speak to reception in person.
+                  </p>
+                </div>
+
+                <button
+                  onClick={handleStartDirectHospitalCall}
+                  disabled={isDialing || !!activeCall}
+                  className="w-full py-3 px-4 bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-sm rounded-xl flex items-center justify-center gap-2 shadow-md transition-all active:scale-95 disabled:opacity-50"
+                >
+                  <Phone className="w-4 h-4 text-emerald-400" />
+                  <span>{isDialing ? 'Connecting Line...' : 'Direct Call Reception'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* AI Reception Conversation Transcript & Proposal Banner (Mode B Result) */}
+          {aiCallResult && aiCallResult.appointment && (
+            <div className="elder-card p-6 sm:p-8 bg-gradient-to-br from-indigo-50 via-white to-sky-50 border-2 border-indigo-200 shadow-xl space-y-6 animate-in fade-in zoom-in-95">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-indigo-100 gap-4">
+                <div className="space-y-1">
+                  <span className="text-xs font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-800">
+                    Mode B: Discovery Complete
+                  </span>
+                  <h3 className="text-2xl font-black text-slate-900">
+                    Proposed Appointment Discovered
+                  </h3>
+                </div>
+
+                <div className="text-xs font-bold text-slate-500 font-mono">
+                  Reception Dialed: {aiCallResult.call.phoneNumber}
+                </div>
+              </div>
+
+              {/* Proposed Slot Details */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 bg-white rounded-2xl border border-indigo-100 shadow-sm">
+                <div>
+                  <span className="text-xs text-slate-400 uppercase font-bold block">Hospital & Doctor</span>
+                  <p className="font-extrabold text-slate-900 text-base">{aiCallResult.appointment.hospital}</p>
+                  <p className="text-xs text-slate-600 font-semibold">{aiCallResult.appointment.doctor}</p>
+                </div>
+
+                <div>
+                  <span className="text-xs text-slate-400 uppercase font-bold block">Date & Time Slot</span>
+                  <p className="font-extrabold text-indigo-700 text-base">
+                    {new Date(aiCallResult.appointment.requestedDate).toLocaleDateString()}
+                  </p>
+                  <p className="text-xs text-slate-700 font-mono font-bold">
+                    {aiCallResult.appointment.requestedTime}
+                  </p>
+                </div>
+
+                <div>
+                  <span className="text-xs text-slate-400 uppercase font-bold block">Status</span>
+                  <span className="inline-block mt-1 px-3 py-1 bg-amber-100 text-amber-800 rounded-full font-extrabold text-xs border border-amber-300">
+                    Pending Confirmation
+                  </span>
+                </div>
+              </div>
+
+              {/* Verified Non-Impersonation Transcript */}
+              {aiCallResult.aiTranscript && (
+                <div className="space-y-2">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                    Verified AI Calling Transcript (Non-Impersonation Guaranteed)
+                  </h4>
+                  <pre className="p-4 bg-slate-900 text-emerald-400 font-mono text-xs rounded-2xl overflow-x-auto whitespace-pre-wrap leading-relaxed shadow-inner">
+                    {aiCallResult.aiTranscript}
+                  </pre>
+                </div>
+              )}
+
+              {/* Human-in-the-Loop Confirmation Actions */}
+              <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <p className="text-xs text-slate-500">
+                  ⚠️ No booking is finalized until you click Confirm. Please verify your availability.
+                </p>
+
+                <div className="flex items-center gap-3">
                   <button
-                    onClick={() => handleStartCall(contact)}
-                    disabled={isDialing || (activeCall !== null && activeCall.status !== 'COMPLETED')}
-                    className="w-full py-3 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 active:scale-95 text-white font-extrabold rounded-2xl flex items-center justify-center gap-2 shadow-md shadow-emerald-500/20 transition-all disabled:opacity-50"
+                    onClick={() => handleCancelAppointment(aiCallResult.appointment!._id)}
+                    className="elder-btn-secondary text-xs font-bold text-rose-600 hover:bg-rose-50 flex items-center gap-1.5"
                   >
-                    <Phone className="w-5 h-5" />
-                    <span>Call {contact.name.split(' ')[0]}</span>
+                    <X className="w-4 h-4" />
+                    <span>Decline Slot</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleConfirmAppointment(aiCallResult.appointment!._id)}
+                    disabled={isConfirmingAppointment}
+                    className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-extrabold text-sm shadow-lg shadow-emerald-600/30 flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50"
+                  >
+                    <Check className="w-4 h-4" />
+                    <span>{isConfirmingAppointment ? 'Confirming...' : 'Confirm Appointment'}</span>
                   </button>
                 </div>
               </div>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* Hospital Dialing Preview (Phase 6 Preview) */}
-      <section className="space-y-4 pt-4 border-t border-slate-200">
-        <div className="elder-card p-6 bg-slate-50 border-dashed border-2 border-slate-300 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-start gap-3">
-            <div className="p-3 bg-white rounded-2xl text-slate-400 border border-slate-200">
-              <Building2 className="w-6 h-6" />
             </div>
-            <div>
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                Phase 6 Preview
-              </span>
-              <h3 className="text-lg font-bold text-slate-800 mt-0.5">
-                Hospital Reception & Autonomous Booking Inquiries
-              </h3>
-              <p className="text-sm text-slate-500 max-w-xl">
-                In Phase 6, ElderCare AI will directly call hospital receptionists extracted from your prescriptions to check appointment availability and schedule visits.
-              </p>
-            </div>
-          </div>
+          )}
 
-          <div className="text-xs font-bold text-slate-400 uppercase tracking-wider px-3 py-1 bg-white rounded-xl border border-slate-200 self-start sm:self-center">
-            Upcoming in Phase 6
-          </div>
+          {/* Upcoming & Confirmed Appointments Schedule */}
+          <section className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
+                  <Calendar className="w-6 h-6 text-brand-600" />
+                  Scheduled Consultations & Visits
+                </h2>
+                <p className="text-sm text-slate-500">
+                  Hospital appointments verified and committed with medical scheduling desks.
+                </p>
+              </div>
+
+              <button
+                onClick={fetchData}
+                className="p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors"
+                title="Refresh schedule"
+              >
+                <RotateCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
+
+            {loading && appointments.length === 0 ? (
+              <div className="text-center py-8">
+                <RotateCw className="w-6 h-6 text-brand-500 animate-spin mx-auto mb-2" />
+                <p className="text-slate-500 text-sm">Loading appointments...</p>
+              </div>
+            ) : appointments.length === 0 ? (
+              <div className="elder-card p-8 text-center text-slate-500 text-sm">
+                No appointments scheduled yet. Use Mode B above to have the AI call reception for you.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {appointments.map((appt) => (
+                  <div
+                    key={appt._id}
+                    className="elder-card p-6 bg-white border border-slate-200 shadow-sm space-y-4 hover:shadow-md transition-shadow"
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`text-xs px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider border ${getStatusBadge(
+                              appt.status
+                            )}`}
+                          >
+                            {appt.status}
+                          </span>
+                          <span className="text-xs text-slate-400 font-mono">
+                            via {appt.source === 'AI_CALL' ? '🤖 AI Call' : '📞 Direct Call'}
+                          </span>
+                        </div>
+                        <h3 className="text-lg font-extrabold text-slate-900 mt-1">{appt.hospital}</h3>
+                        <p className="text-xs font-semibold text-slate-600">{appt.doctor} • {appt.department}</p>
+                      </div>
+
+                      <div className="text-right">
+                        <span className="text-sm font-black text-brand-700 block">
+                          {new Date(appt.requestedDate).toLocaleDateString([], {
+                            month: 'short',
+                            day: 'numeric',
+                          })}
+                        </span>
+                        <span className="text-xs font-mono font-bold text-slate-500">
+                          {appt.requestedTime}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="p-3 bg-slate-50 rounded-xl text-xs text-slate-600 font-mono flex items-center justify-between">
+                      <span>Reception: {appt.receptionPhone}</span>
+                      {appt.status === 'PENDING_CONFIRMATION' && (
+                        <button
+                          onClick={() => handleConfirmAppointment(appt._id)}
+                          className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs"
+                        >
+                          Confirm
+                        </button>
+                      )}
+                      {appt.status === 'CONFIRMED' && (
+                        <button
+                          onClick={() => handleCancelAppointment(appt._id)}
+                          className="text-rose-600 hover:underline font-bold text-xs"
+                        >
+                          Cancel Visit
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
         </div>
-      </section>
+      )}
 
-      {/* Call History & Telephony Logs */}
-      <section className="space-y-4">
+      {/* Common Call History & Telephony Records (Both Caregiver & Hospital Calls) */}
+      <section className="space-y-4 pt-4 border-t border-slate-200">
         <div className="flex items-center justify-between">
           <h2 className="text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
             <Clock className="w-6 h-6 text-brand-600" />
-            Call History & Telephony Records
+            Complete Call History & Logs
           </h2>
           <button
             onClick={fetchData}
@@ -362,8 +881,8 @@ export const Calls: React.FC = () => {
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50 text-slate-500 text-left font-bold">
                 <tr>
-                  <th className="px-5 py-3.5">Contact</th>
-                  <th className="px-5 py-3.5">Relationship</th>
+                  <th className="px-5 py-3.5">Contact / Destination</th>
+                  <th className="px-5 py-3.5">Type</th>
                   <th className="px-5 py-3.5">Phone Number</th>
                   <th className="px-5 py-3.5">Status</th>
                   <th className="px-5 py-3.5">Duration</th>
@@ -375,8 +894,19 @@ export const Calls: React.FC = () => {
                   <tr key={c._id} className="hover:bg-slate-50/50">
                     <td className="px-5 py-3.5 font-bold text-slate-900">
                       {c.contactName}
+                      <span className="block text-xs font-normal text-slate-500">{c.relationship}</span>
                     </td>
-                    <td className="px-5 py-3.5 text-slate-600">{c.relationship}</td>
+                    <td className="px-5 py-3.5">
+                      <span
+                        className={`text-xs px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider ${
+                          c.type === 'HOSPITAL'
+                            ? 'bg-purple-100 text-purple-800'
+                            : 'bg-blue-100 text-blue-800'
+                        }`}
+                      >
+                        {c.type}
+                      </span>
+                    </td>
                     <td className="px-5 py-3.5 font-mono text-slate-600 text-xs">
                       {c.phoneNumber}
                     </td>

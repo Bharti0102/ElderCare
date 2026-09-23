@@ -605,15 +605,26 @@ export const Prescription: React.FC = () => {
                   <span>{isConfirming ? 'Saving Verification...' : 'Confirm & Save Prescription'}</span>
                 </button>
               ) : (
-                <button
-                  onClick={handleBridgeToReminders}
-                  disabled={isBridging || medicines.length === 0}
-                  className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-2xl font-bold text-sm shadow-md shadow-emerald-500/20 flex items-center gap-2 transition-all active:scale-95"
-                >
-                  <Clock className="w-4 h-4" />
-                  <span>{isBridging ? 'Scheduling Reminders...' : 'Create Medication Reminders'}</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
+                <>
+                  <Link
+                    to={`/calls?tab=hospital&rxId=${selectedRx._id}`}
+                    className="px-5 py-2.5 bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-700 hover:to-indigo-700 text-white rounded-2xl font-bold text-sm shadow-md shadow-sky-500/20 flex items-center gap-2 transition-all active:scale-95"
+                  >
+                    <Building2 className="w-4 h-4" />
+                    <span>Book Follow-up / Call Clinic</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </Link>
+
+                  <button
+                    onClick={handleBridgeToReminders}
+                    disabled={isBridging || medicines.length === 0}
+                    className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-2xl font-bold text-sm shadow-md shadow-emerald-500/20 flex items-center gap-2 transition-all active:scale-95"
+                  >
+                    <Clock className="w-4 h-4" />
+                    <span>{isBridging ? 'Scheduling Reminders...' : 'Create Medication Reminders'}</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                </>
               )}
             </div>
           </div>
