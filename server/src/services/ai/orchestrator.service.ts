@@ -1,6 +1,7 @@
 import { LLMService } from './llm.service';
 import { ChatTool } from './tools/chat.tool';
 import { ReminderTool } from './tools/reminder.tool';
+import { PrescriptionTool } from './tools/prescription.tool';
 import { ChatService } from '../chat/chat.service';
 import { KnownIntent } from '../../integrations/llm/llm.interface';
 
@@ -15,6 +16,7 @@ export interface OrchestratorResult {
 export class OrchestratorService {
   private static chatTool = new ChatTool();
   private static reminderTool = new ReminderTool();
+  private static prescriptionTool = new PrescriptionTool();
 
   public static async processMessage(
     userId: string,
@@ -71,15 +73,15 @@ export class OrchestratorService {
       }
 
       case 'PRESCRIPTION': {
-        const previewReply =
-          '📋 I noticed you are asking about a prescription or medicine dosage. The Prescription OCR & Vision Intelligence workflow will be activated in Phase 4. Please ensure you consult your doctor or verified caregiver before altering any medications.';
         await ChatService.addMessage(userId, 'user', trimmedInput, 'PRESCRIPTION');
-        await ChatService.addMessage(userId, 'assistant', previewReply, 'PRESCRIPTION');
+        const toolResult = await this.prescriptionTool.execute(userId, { message: trimmedInput });
+        await ChatService.addMessage(userId, 'assistant', toolResult.message, 'PRESCRIPTION');
         return {
-          reply: previewReply,
+          reply: toolResult.message,
           intent: 'PRESCRIPTION',
           confidence: intentResult.confidence,
-          suggestions: ['View Prescriptions tab', 'Call my doctor', 'Tell me a gentle story'],
+          toolResults: [toolResult],
+          suggestions: toolResult.suggestions || ['View Prescriptions tab', 'Call my doctor', 'Tell me a gentle story'],
         };
       }
 

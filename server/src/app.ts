@@ -21,7 +21,7 @@ export const createApp = (): Application => {
           scriptSrc: ["'self'", "'unsafe-inline'"],
           styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
           fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
-          imgSrc: ["'self'", 'data:', 'blob:'],
+          imgSrc: ["'self'", 'data:', 'blob:', 'http://localhost:5000', 'http://127.0.0.1:5000'],
           connectSrc: ["'self'", 'http://localhost:5000', 'http://localhost:5173'],
         },
       },
@@ -43,6 +43,13 @@ export const createApp = (): Application => {
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
   app.use(cookieParser());
+
+  // Serve uploaded files statically
+  const uploadsPath = path.resolve(process.cwd(), 'uploads');
+  if (!fs.existsSync(uploadsPath)) {
+    fs.mkdirSync(uploadsPath, { recursive: true });
+  }
+  app.use('/uploads', express.static(uploadsPath));
 
   // Mount API router
   app.use('/api', routes);

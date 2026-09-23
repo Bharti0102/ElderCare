@@ -92,3 +92,58 @@ export interface UpdateReminderDTO {
   repeat?: ReminderRepeat;
   status?: ReminderStatus;
 }
+
+export type PrescriptionStatus = 'UPLOADED' | 'ANALYZED' | 'CONFIRMED' | 'REJECTED';
+
+export interface PrescriptionMedicine {
+  _id?: string;
+  name: string;
+  dosage?: string;
+  frequency?: string;
+  instructions?: string;
+  duration?: string;
+}
+
+export interface Prescription {
+  _id: string;
+  userId: string;
+  fileUrl: string;
+  fileName: string;
+  fileType: string;
+  fileSize: number;
+  doctor?: {
+    name?: string;
+    specialty?: string;
+  };
+  hospital?: {
+    name?: string;
+    address?: string;
+  };
+  receptionPhone?: string;
+  prescriptionDate?: string;
+  medicines: PrescriptionMedicine[];
+  rawText?: string;
+  confidence: number;
+  status: PrescriptionStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ConfirmPrescriptionDTO {
+  doctor?: {
+    name?: string;
+    specialty?: string;
+  };
+  hospital?: {
+    name?: string;
+    address?: string;
+  };
+  receptionPhone?: string;
+  prescriptionDate?: string;
+  medicines: PrescriptionMedicine[];
+}
+
+export interface CreateRemindersFromPrescriptionDTO {
+  medicineIndices?: number[];
+  preferredTime?: string;
+}

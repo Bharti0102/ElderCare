@@ -1,6 +1,6 @@
 # ElderCare AI — Project Status
 
-## Overall Status: Phase 3 Completed
+## Overall Status: Phase 4 Completed
 
 | Phase | Description | Status | Completion Date |
 |-------|-------------|--------|-----------------|
@@ -8,11 +8,25 @@
 | **Phase 1** | Authentication + Emergency Contacts | **Completed** | 2026-09-23 |
 | **Phase 2** | AI Orchestrator + Companion | **Completed** | 2026-09-23 |
 | **Phase 3** | Reminder Agent (Natural Language Reminders, Scheduler) | **Completed** | 2026-09-23 |
-| **Phase 4** | Prescription Intelligence (Upload, OCR/Vision, Validation) | **Next in Queue** | — |
-| **Phase 5** | Caregiver Calling (Calling Tool, Twilio/Provider Integration) | Planned | — |
+| **Phase 4** | Prescription Intelligence (Upload, OCR/Vision, Validation) | **Completed** | 2026-09-23 |
+| **Phase 5** | Caregiver Calling (Calling Tool, Twilio/Provider Integration) | **Next in Queue** | — |
 | **Phase 6** | Hospital Calling + Appointment Assistance | Planned | — |
 | **Phase 7** | Voice Pipeline (STT, TTS, Voice-first interaction) | Planned | — |
 | **Phase 8** | Integration, Accessibility & Final Polish | Planned | — |
+
+---
+
+## Phase 4 Checklist
+- [x] Prescription Mongoose model (`Prescription.ts`) with doctor, hospital, reception phone, date, and medicines array
+- [x] Multipart file upload middleware (`upload.middleware.ts`) using `multer` with file format and size validation
+- [x] OCR/Vision provider abstraction (`IOCRProvider`, `MockOCRProvider`, `GeminiVisionProvider`, `OCRFactory`)
+- [x] Prescription service (`prescription.service.ts`) for document extraction, CRUD, and caregiver verification
+- [x] 1-Click Reminder Bridge: automatically creates scheduled medication reminders in Phase 3 Reminder Agent
+- [x] AI Tool (`prescription.tool.ts`) wired into `OrchestratorService` answering conversational inquiries about medications
+- [x] Authenticated REST API: `POST /api/prescriptions/upload`, `GET /api/prescriptions`, `GET /api/prescriptions/:id`, `PUT /api/prescriptions/:id/confirm`, `POST /api/prescriptions/:id/create-reminders`, `DELETE /api/prescriptions/:id`
+- [x] Frontend `Prescription.tsx` page with drag-and-drop upload, editable review table, safety disclaimers, archive grid, and read-aloud voice support
+- [x] End-to-end automated verification passing 24 assertions with 100% pass rate
+- [x] Zero regressions across Phase 1, Phase 2, and Phase 3 suites
 
 ---
 

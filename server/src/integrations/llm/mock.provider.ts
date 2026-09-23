@@ -28,7 +28,7 @@ export class MockLLMProvider implements LLMProvider {
       'hurt',
       'hurts',
     ];
-    if (medicalKeywords.some((k) => text.includes(k)) && !text.includes('remind')) {
+    if (medicalKeywords.some((k) => text.includes(k)) && !text.includes('remind') && !text.includes('prescription')) {
       return {
         intent: 'CHAT',
         confidence: 0.99,
