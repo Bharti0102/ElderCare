@@ -304,7 +304,7 @@ export const Reminders: React.FC = () => {
         <div>
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 text-xs font-semibold border border-emerald-200 mb-2">
             <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-            Phase 3: Active & Operational
+            Daily Medication Schedule & Alerts
           </div>
           <h1 className="text-3xl font-extrabold text-slate-900">Medication & Daily Reminders</h1>
           <p className="text-slate-600 mt-1">

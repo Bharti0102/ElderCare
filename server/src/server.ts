@@ -31,6 +31,11 @@ const startServer = async (): Promise<void> => {
       methods: ['GET', 'POST'],
       credentials: true,
     },
+    pingTimeout: 60000,
+    pingInterval: 25000,
+    connectTimeout: 45000,
+    maxHttpBufferSize: 1e7,
+    transports: ['websocket', 'polling'],
   });
 
   io.on('connection', (socket) => {

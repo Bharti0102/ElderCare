@@ -18,11 +18,34 @@ export class CloudflareTunnelService {
   private static lastError: string | null = null;
   private static isStarting: boolean = false;
 
+  private static isIntentionalStop: boolean = false;
+
+  private static syncUrlToEnv(url: string): void {
+    try {
+      const envPath = path.join(process.cwd(), '.env');
+      if (fs.existsSync(envPath)) {
+        let content = fs.readFileSync(envPath, 'utf8');
+        if (content.includes('CLOUDFLARE_TUNNEL_URL=')) {
+          content = content.replace(/CLOUDFLARE_TUNNEL_URL=.*/g, `CLOUDFLARE_TUNNEL_URL=${url}`);
+        } else {
+          content += `\nCLOUDFLARE_TUNNEL_URL=${url}`;
+        }
+        if (content.includes('CLIENT_URL=')) {
+          content = content.replace(/CLIENT_URL=.*/g, `CLIENT_URL=${url}`);
+        } else {
+          content += `\nCLIENT_URL=${url}`;
+        }
+        fs.writeFileSync(envPath, content, 'utf8');
+      }
+    } catch {
+      // non-fatal env sync
+    }
+  }
+
   /**
    * Discovers the cloudflared executable on the system.
    */
   public static findCloudflaredBinary(): string | null {
-    // 1. Standard Program Files installation path
     const candidatePaths = [
       'C:\\Program Files (x86)\\cloudflared\\cloudflared.exe',
       'C:\\Program Files\\cloudflared\\cloudflared.exe',
@@ -36,7 +59,6 @@ export class CloudflareTunnelService {
       }
     }
 
-    // 2. Default to PATH if available
     return 'cloudflared';
   }
 
@@ -45,12 +67,13 @@ export class CloudflareTunnelService {
    * By default forwards to port 5173 (which proxies /api and /socket.io to backend 5000).
    */
   public static async startTunnel(targetPort: number = 5173): Promise<string> {
+    this.isIntentionalStop = false;
+
     if (this.activeUrl && this.process) {
       return this.activeUrl;
     }
 
     if (this.isStarting) {
-      // Wait for existing start attempt
       return new Promise((resolve, reject) => {
         const interval = setInterval(() => {
           if (this.activeUrl) {
@@ -78,10 +101,14 @@ export class CloudflareTunnelService {
       const targetUrl = `http://localhost:${targetPort}`;
       console.log(`[CloudflareTunnel] Starting quick tunnel targeting ${targetUrl} using ${binary}...`);
 
-      const child = spawn(binary, ['tunnel', '--url', targetUrl], {
-        windowsHide: true,
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
+      const child = spawn(
+        binary,
+        ['tunnel', '--url', targetUrl, '--no-autoupdate', '--metrics', '127.0.0.1:0'],
+        {
+          windowsHide: true,
+          stdio: ['ignore', 'pipe', 'pipe'],
+        }
+      );
 
       this.process = child;
       let resolved = false;
@@ -96,7 +123,6 @@ export class CloudflareTunnelService {
 
       const handleOutput = (chunk: Buffer) => {
         const text = chunk.toString();
-        // Look for *.trycloudflare.com
         const match = text.match(/https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com/);
         if (match && !resolved) {
           resolved = true;
@@ -105,6 +131,7 @@ export class CloudflareTunnelService {
           this.startedAt = new Date();
           this.isStarting = false;
           console.log(`[CloudflareTunnel] ✅ Tunnel established! Live Public URL: ${this.activeUrl}`);
+          this.syncUrlToEnv(this.activeUrl);
           resolve(this.activeUrl);
         }
       };
@@ -126,9 +153,17 @@ export class CloudflareTunnelService {
       child.on('exit', (code, signal) => {
         console.log(`[CloudflareTunnel] Process exited (code: ${code}, signal: ${signal})`);
         this.process = null;
-        this.activeUrl = null;
-        this.startedAt = null;
         this.isStarting = false;
+
+        // Auto-reconnect watchdog: if not an intentional stop, re-establish tunnel
+        if (env.AUTO_START_TUNNEL && !this.isIntentionalStop) {
+          console.log('[CloudflareTunnel] Unexpected disconnect. Guardian restarting tunnel in 3s...');
+          setTimeout(() => {
+            CloudflareTunnelService.startTunnel(targetPort).catch((e) => {
+              console.warn('[CloudflareTunnel] Auto-reconnect attempt notice:', e.message);
+            });
+          }, 3000);
+        }
       });
     });
   }
@@ -137,11 +172,12 @@ export class CloudflareTunnelService {
    * Stops the active tunnel process.
    */
   public static stopTunnel(): void {
+    this.isIntentionalStop = true;
     if (this.process) {
       console.log('[CloudflareTunnel] Terminating tunnel process...');
       try {
         this.process.kill();
-      } catch (err) {
+      } catch {
         // Ignore kill errors
       }
       this.process = null;

@@ -3,7 +3,6 @@ import {
   Phone,
   PhoneCall,
   PhoneOff,
-  Sparkles,
   UserCheck,
   Clock,
   ShieldCheck,
@@ -23,10 +22,8 @@ import {
   MicOff,
   Copy,
   Share2,
-  Globe,
   Smartphone,
   Send,
-  ExternalLink,
   Video,
   VideoOff,
 } from 'lucide-react';
@@ -34,7 +31,6 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { WebRTCService } from '../services/webrtc.service';
 import {
   getTunnelStatus,
-  startTunnel,
   sendTestSms,
   TunnelStatusResponse,
 } from '../services/tunnel.service';
@@ -43,8 +39,6 @@ import {
   initiateCaregiverCall,
   getCalls,
   hangupCall,
-  getTelephonyStatus,
-  TelephonyStatus,
 } from '../services/calling.service';
 import { getContacts } from '../services/contact.service';
 import {
@@ -106,9 +100,7 @@ export const Calls: React.FC = () => {
   const [aiCallResult, setAiCallResult] = useState<HospitalCallResponse | null>(null);
   const [isAiCalling, setIsAiCalling] = useState(false);
   const [isConfirmingAppointment, setIsConfirmingAppointment] = useState(false);
-  const [telephonyStatus, setTelephonyStatus] = useState<TelephonyStatus | null>(null);
   const [tunnelStatus, setTunnelStatus] = useState<TunnelStatusResponse | null>(null);
-  const [isStartingTunnel, setIsStartingTunnel] = useState(false);
   const [isSendingTestSms, setIsSendingTestSms] = useState(false);
   const [testSmsPhone, setTestSmsPhone] = useState('+918683072836');
   const [showTestSmsInput, setShowTestSmsInput] = useState(false);
@@ -137,11 +129,6 @@ export const Calls: React.FC = () => {
       setContacts(contactList);
       setCalls(callList);
       setAppointments(apptList);
-
-      // Fetch telephony provider info
-      getTelephonyStatus()
-        .then(setTelephonyStatus)
-        .catch(() => {});
 
       // Fetch Cloudflare tunnel & Fast2SMS info
       getTunnelStatus()
@@ -248,22 +235,6 @@ export const Calls: React.FC = () => {
       ? `https://wa.me/${cleanPhone}?text=${text}`
       : `https://api.whatsapp.com/send?text=${text}`;
     window.open(waUrl, '_blank');
-  };
-
-  const handleStartTunnel = async () => {
-    try {
-      setIsStartingTunnel(true);
-      setError(null);
-      const res = await startTunnel();
-      setSuccessMsg(`Cloudflare Tunnel connected! Public URL: ${res.url}`);
-      const updated = await getTunnelStatus();
-      setTunnelStatus(updated);
-      setTimeout(() => setSuccessMsg(null), 6000);
-    } catch (err: any) {
-      setError(err.response?.data?.error?.message || err.message || 'Failed to start Cloudflare Tunnel');
-    } finally {
-      setIsStartingTunnel(false);
-    }
   };
 
   const handleSendTestSms = async () => {
@@ -560,34 +531,34 @@ export const Calls: React.FC = () => {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 text-xs font-semibold border border-emerald-200 mb-2">
-            <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-            Phase 6: Hospital & Caregiver Telephony Active
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 text-xs font-bold border border-emerald-200 mb-2">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+            <span>Encrypted Healthcare Calling & Appointments</span>
           </div>
           <h1 className="text-3xl font-extrabold text-slate-900">
-            Care Coordinator Calling & Appointments
+            Care Calling & Clinic Appointments
           </h1>
-          <p className="text-slate-600 mt-1">
-            Place verified caregiver calls or let the AI Assistant contact hospital reception to discover and book doctor visits.
+          <p className="text-slate-600 mt-1 max-w-2xl">
+            Place direct high-definition video and voice calls with your family caregivers, or let your AI assistant contact hospital reception to discover doctor visit availability.
           </p>
         </div>
 
         <div className="flex items-center gap-3">
           <Link
             to="/chat"
-            className="elder-btn-secondary text-sm flex items-center gap-1.5"
-            title="Call with voice via AI Companion"
+            className="elder-btn-secondary text-sm flex items-center gap-1.5 shadow-xs"
+            title="Speak with AI Companion"
           >
             <MessageSquare className="w-4 h-4 text-brand-600" />
-            <span>Call via AI Chat</span>
+            <span>AI Companion</span>
           </Link>
           <Link
             to="/prescription"
-            className="elder-btn-secondary text-sm flex items-center gap-1.5"
+            className="elder-btn-secondary text-sm flex items-center gap-1.5 shadow-xs"
             title="View Prescriptions"
           >
             <FileText className="w-4 h-4 text-brand-600" />
@@ -596,158 +567,84 @@ export const Calls: React.FC = () => {
         </div>
       </div>
 
-      {/* Cloudflare Public Mobile Gateway & Fast2SMS Gateway Card */}
-      <div className="p-5 bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 border border-indigo-800/50 rounded-3xl text-white shadow-xl space-y-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="p-1.5 rounded-lg bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                <Globe className="w-4 h-4" />
-              </span>
-              <span className="font-extrabold text-sm sm:text-base text-white tracking-wide">
-                Cloudflare Mobile Gateway & Fast2SMS Delivery
-              </span>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                Live HTTPS
-              </span>
-            </div>
-            <p className="text-xs text-indigo-200/80 leading-relaxed max-w-2xl">
-              Caregiver links are routed via secure Cloudflare HTTPS. When Fast2SMS sends an alert to Indian mobile numbers (+91), tapping the link on mobile Safari/Chrome instantly establishes full-duplex WebRTC audio without installing any app.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2 flex-wrap">
-            {tunnelStatus?.tunnel?.active ? (
-              <div className="flex items-center gap-2">
-                <div className="px-3 py-1.5 rounded-xl bg-emerald-950/70 border border-emerald-500/40 text-emerald-300 text-xs font-mono font-bold flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                  <span className="truncate max-w-[200px] sm:max-w-[260px]">
-                    {tunnelStatus.effectiveClientUrl}
-                  </span>
-                </div>
-                <a
-                  href={tunnelStatus.effectiveClientUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-indigo-200 transition-colors"
-                  title="Open public tunnel domain"
-                >
-                  <ExternalLink className="w-4 h-4" />
-                </a>
-              </div>
-            ) : (
-              <button
-                onClick={handleStartTunnel}
-                disabled={isStartingTunnel}
-                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-extrabold text-xs flex items-center gap-2 shadow-lg shadow-indigo-900/40 transition-all disabled:opacity-50"
-              >
-                {isStartingTunnel ? (
-                  <>
-                    <RotateCw className="w-3.5 h-3.5 animate-spin" />
-                    <span>Connecting Tunnel...</span>
-                  </>
-                ) : (
-                  <>
-                    <Globe className="w-3.5 h-3.5" />
-                    <span>Start Cloudflare Tunnel</span>
-                  </>
-                )}
-              </button>
-            )}
-
-            <button
-              onClick={() => setShowTestSmsInput(!showTestSmsInput)}
-              className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 active:scale-95 text-white font-bold text-xs flex items-center gap-1.5 border border-white/15 transition-all"
-            >
-              <Smartphone className="w-3.5 h-3.5 text-amber-300" />
-              <span>{showTestSmsInput ? 'Hide SMS Test' : 'Test Real SMS (+91)'}</span>
-            </button>
-          </div>
+      {/* Sleek Medical Line Status Bar */}
+      <div className="p-3.5 bg-slate-900 rounded-2xl border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-white shadow-md">
+        <div className="flex items-center gap-2.5">
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+          </span>
+          <span className="font-bold text-white">Live Caregiver Mobile Gateway Active</span>
+          <span className="text-slate-400 hidden md:inline">•</span>
+          <span className="text-slate-400 hidden md:inline">Instant Mobile SMS Dispatch & Private HD Calling</span>
         </div>
 
-        {/* Expandable Test SMS Panel */}
-        {showTestSmsInput && (
-          <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 text-xs animate-in fade-in duration-150">
-            <div className="flex items-center gap-2 text-indigo-200">
-              <span className="font-semibold text-white">Send Instant Call Join Link:</span>
-              <span>Fast2SMS will deliver a 1-tap WebRTC call link to this phone.</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                value={testSmsPhone}
-                onChange={(e) => setTestSmsPhone(e.target.value)}
-                placeholder="+918683072836"
-                className="px-3 py-1.5 rounded-xl bg-slate-800 text-white border border-slate-700 font-mono text-xs focus:outline-hidden focus:ring-2 focus:ring-indigo-500 w-40"
-              />
-              <button
-                onClick={handleSendTestSms}
-                disabled={isSendingTestSms}
-                className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-extrabold flex items-center gap-1.5 shadow-md disabled:opacity-50 transition-all"
-              >
-                {isSendingTestSms ? (
-                  <RotateCw className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <Send className="w-3.5 h-3.5" />
-                )}
-                <span>Send SMS Now</span>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Status Pills */}
-        <div className="pt-2 border-t border-white/10 flex flex-wrap items-center gap-2 text-[11px]">
-          <span className="px-2.5 py-1 rounded-lg bg-white/10 text-slate-200 flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-            WebRTC Engine:{' '}
-            <strong>
-              {telephonyStatus?.provider ? `${telephonyStatus.provider} (Device VoIP)` : 'Full-Duplex Device VoIP'}
-            </strong>
-          </span>
-          <span className="px-2.5 py-1 rounded-lg bg-white/10 text-slate-200 flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
-            SMS Gateway:{' '}
-            <strong className="text-amber-200">
-              {tunnelStatus?.sms?.provider || 'Fast2SMS Active'}
-            </strong>
-          </span>
-          <span className="px-2.5 py-1 rounded-lg bg-white/10 text-slate-200 flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-sky-400" />
-            Traveral:{' '}
-            <strong>Google STUN + Cloudflare Edge</strong>
-          </span>
+        <div className="flex items-center gap-2 self-end sm:self-center">
+          <button
+            onClick={() => setShowTestSmsInput(!showTestSmsInput)}
+            className="px-3 py-1 rounded-xl bg-white/10 hover:bg-white/20 active:scale-95 text-slate-200 hover:text-white font-semibold text-[11px] transition-all flex items-center gap-1.5"
+          >
+            <Smartphone className="w-3.5 h-3.5 text-amber-300" />
+            <span>{showTestSmsInput ? 'Hide Test' : 'Test Real SMS (+91)'}</span>
+          </button>
         </div>
       </div>
 
-      {/* Tabs: Caregiver Calling vs Hospital Calling */}
-      <div className="flex border-b border-slate-200 gap-4">
+      {/* Expandable Test SMS Panel */}
+      {showTestSmsInput && (
+        <div className="p-4 rounded-2xl bg-indigo-950/40 border border-indigo-500/30 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 text-xs animate-in fade-in duration-150">
+          <div className="flex items-center gap-2 text-indigo-200">
+            <span className="font-bold text-white">Direct SMS Test:</span>
+            <span>Dispatch an immediate 1-tap call join link to your phone.</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={testSmsPhone}
+              onChange={(e) => setTestSmsPhone(e.target.value)}
+              placeholder="+918683072836"
+              className="px-3 py-1.5 rounded-xl bg-slate-800 text-white border border-slate-700 font-mono text-xs focus:ring-2 focus:ring-indigo-500 w-44"
+            />
+            <button
+              onClick={handleSendTestSms}
+              disabled={isSendingTestSms}
+              className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold flex items-center gap-1.5 shadow-md disabled:opacity-50 transition-all"
+            >
+              {isSendingTestSms ? (
+                <RotateCw className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Send className="w-3.5 h-3.5" />
+              )}
+              <span>Send Link</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Tabs: Family Caregivers vs Clinic Appointments */}
+      <div className="flex border-b border-slate-200 gap-6">
         <button
           onClick={() => setActiveTab('caregiver')}
-          className={`pb-3 px-2 font-bold text-base flex items-center gap-2 border-b-2 transition-colors ${
+          className={`pb-3 px-1 font-extrabold text-base flex items-center gap-2 border-b-2 transition-all ${
             activeTab === 'caregiver'
               ? 'border-brand-600 text-brand-600'
               : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
           <UserCheck className="w-5 h-5" />
-          <span>Caregiver Calling (Phase 5)</span>
+          <span>Family Caregivers</span>
         </button>
 
         <button
           onClick={() => setActiveTab('hospital')}
-          className={`pb-3 px-2 font-bold text-base flex items-center gap-2 border-b-2 transition-colors ${
+          className={`pb-3 px-1 font-extrabold text-base flex items-center gap-2 border-b-2 transition-all ${
             activeTab === 'hospital'
               ? 'border-brand-600 text-brand-600'
               : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
           <Building2 className="w-5 h-5" />
-          <span>Hospital Calling & Appointments (Phase 6)</span>
-          <span className="px-2 py-0.5 text-xs font-extrabold bg-brand-100 text-brand-700 rounded-full">
-            New
-          </span>
+          <span>Hospital & Doctor Appointments</span>
         </button>
       </div>
 
@@ -795,7 +692,7 @@ export const Calls: React.FC = () => {
                   {activeCall.contactName} ({activeCall.relationship})
                 </h2>
                 <p className="text-sky-100 text-sm font-mono">
-                  Line: {activeCall.phoneNumber} • Engine: WebRTC Full-Duplex
+                  Line: {activeCall.phoneNumber} • Secure Private Line
                 </p>
               </div>
             </div>
@@ -917,12 +814,12 @@ export const Calls: React.FC = () => {
               <span className="font-semibold text-emerald-100">
                 {isMuted
                   ? 'Microphone muted • Click "Muted" to speak'
-                  : 'WebRTC In-Browser Audio & Video Active • Speaking via Laptop Mic & Speakers'}
+                  : 'Active Call • Speaking via Laptop Audio'}
               </span>
             </div>
             <div className="flex items-center gap-2 text-sky-200/80">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span>Peer-to-Peer STUN VoIP</span>
+              <span>Direct Encrypted Connection</span>
             </div>
           </div>
 
@@ -1092,7 +989,7 @@ export const Calls: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 2: Hospital Calling & Appointment Assistance (Phase 6) */}
+      {/* TAB 2: Hospital Calling & Appointment Assistance */}
       {activeTab === 'hospital' && (
         <div className="space-y-8 animate-in fade-in duration-200">
           {/* Dual-Mode Selector Card */}
@@ -1100,13 +997,13 @@ export const Calls: React.FC = () => {
             <div>
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-sky-50 text-sky-800 text-xs font-bold border border-sky-200 mb-2">
                 <Building2 className="w-3.5 h-3.5 text-sky-600" />
-                Dual-Mode Hospital Calling Protocol
+                Hospital & Clinic Care Coordinator
               </div>
               <h2 className="text-2xl font-black text-slate-900">
-                Hospital Calling & Scheduling Assistant
+                Book Doctor & Clinic Appointments
               </h2>
               <p className="text-slate-600 text-sm mt-1 max-w-3xl">
-                Choose between <strong>Mode B (AI Calling Agent)</strong> who autonomously calls reception, introduces itself as an AI, inquires about availability, and presents proposed slots; or <strong>Mode A (Direct Call)</strong> to speak with reception yourself.
+                Let our <strong>AI Assistant</strong> coordinate with clinic reception to find open appointment slots, or connect with the front desk via <strong>Direct Call</strong>.
               </p>
             </div>
 
@@ -1210,11 +1107,11 @@ export const Calls: React.FC = () => {
                 <div>
                   <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-brand-100 text-brand-800 text-xs font-extrabold mb-1">
                     <Bot className="w-3.5 h-3.5" />
-                    Mode B: Autonomous AI Calling (Recommended)
+                    AI Booking Assistant (Recommended)
                   </div>
-                  <h3 className="text-lg font-bold text-slate-900">Let AI Call Reception</h3>
+                  <h3 className="text-lg font-bold text-slate-900">Have AI Call Clinic Desk</h3>
                   <p className="text-xs text-slate-600 mt-1">
-                    AI agent calls reception, introduces itself, discovers open appointment slots for your doctor, and brings back a booking proposal for your approval.
+                    AI agent calls clinic reception, checks doctor schedule availability, and brings back a booking proposal for your approval.
                   </p>
                 </div>
 
@@ -1233,11 +1130,11 @@ export const Calls: React.FC = () => {
                 <div>
                   <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 text-xs font-bold mb-1">
                     <User className="w-3.5 h-3.5" />
-                    Mode A: User Direct Line
+                    Direct Reception Line
                   </div>
                   <h3 className="text-lg font-bold text-slate-900">Direct Call to Reception</h3>
                   <p className="text-xs text-slate-600 mt-1">
-                    Connects your telephone line directly to the hospital scheduling desk so you can speak to reception in person.
+                    Connects your telephone line directly to the hospital scheduling desk to speak with front desk staff in person.
                   </p>
                 </div>
 
@@ -1259,7 +1156,7 @@ export const Calls: React.FC = () => {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-indigo-100 gap-4">
                 <div className="space-y-1">
                   <span className="text-xs font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-800">
-                    Mode B: Discovery Complete
+                    Appointment Slot Found
                   </span>
                   <h3 className="text-2xl font-black text-slate-900">
                     Proposed Appointment Discovered
@@ -1302,7 +1199,7 @@ export const Calls: React.FC = () => {
                 <div className="space-y-2">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
                     <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                    Verified AI Calling Transcript (Non-Impersonation Guaranteed)
+                    Clinic Call Confirmation Transcript
                   </h4>
                   <pre className="p-4 bg-slate-900 text-emerald-400 font-mono text-xs rounded-2xl overflow-x-auto whitespace-pre-wrap leading-relaxed shadow-inner">
                     {aiCallResult.aiTranscript}
@@ -1367,7 +1264,7 @@ export const Calls: React.FC = () => {
               </div>
             ) : appointments.length === 0 ? (
               <div className="elder-card p-8 text-center text-slate-500 text-sm">
-                No appointments scheduled yet. Use Mode B above to have the AI call reception for you.
+                No appointments scheduled yet. Use the AI Booking Assistant above or dial reception directly.
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1387,7 +1284,7 @@ export const Calls: React.FC = () => {
                             {appt.status}
                           </span>
                           <span className="text-xs text-slate-400 font-mono">
-                            via {appt.source === 'AI_CALL' ? '🤖 AI Call' : '📞 Direct Call'}
+                            via {appt.source === 'AI_CALL' ? 'AI Assistant' : 'Direct Call'}
                           </span>
                         </div>
                         <h3 className="text-lg font-extrabold text-slate-900 mt-1">{appt.hospital}</h3>

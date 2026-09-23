@@ -270,9 +270,9 @@ export const CallJoin: React.FC = () => {
             <div className="p-4 bg-slate-800/70 rounded-2xl border border-slate-700/60 text-xs text-slate-300 text-left flex items-start gap-3">
               <ShieldCheck className="w-5 h-5 text-emerald-400 mt-0.5 flex-shrink-0" />
               <div className="space-y-1">
-                <p className="font-semibold text-white">Peer-to-Peer Encrypted WebRTC</p>
+                <p className="font-semibold text-white">Private Encrypted Call</p>
                 <p className="text-slate-400">
-                  Connect instantly in full HD audio and video. No account or app download required. Works on mobile Safari & Chrome.
+                  Connect instantly in full HD audio and video. No account or app download required. Works on all mobile devices.
                 </p>
               </div>
             </div>
@@ -344,7 +344,7 @@ export const CallJoin: React.FC = () => {
                     <h3 className="text-2xl font-black text-white">
                       {callInfo?.callerName || 'Elderly Parent'}
                     </h3>
-                    <p className="text-xs text-indigo-300 mt-1">Audio Live • Speaking via WebRTC</p>
+                    <p className="text-xs text-indigo-300 mt-1">Audio Live • Connected Directly</p>
                   </div>
                   <VoiceWaveform state={audioLevel > 10 ? 'listening' : 'speaking'} />
                 </div>
@@ -419,7 +419,7 @@ export const CallJoin: React.FC = () => {
       {/* Reassurance Footer */}
       <div className="mt-4 text-xs text-slate-500 flex items-center gap-1.5">
         <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-        <span>Free Direct WebRTC • Google STUN Peer-to-Peer</span>
+        <span>Private Encrypted Call • No App Download Required</span>
       </div>
     </div>
   );
