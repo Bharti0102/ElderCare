@@ -271,26 +271,42 @@ export const Calls: React.FC = () => {
         name: contact.name,
       });
 
-      // Stop ringing once call request is accepted
-      if (ringHandleRef.current) {
-        ringHandleRef.current.stop();
-        ringHandleRef.current = null;
-      }
+      // Display active calling banner in CALLING state while waiting for caregiver to tap SMS link
+      const callingState: Call = {
+        ...call,
+        status: 'CALLING',
+      };
+      setActiveCall(callingState);
+      setCallDuration(0);
+      setIsMuted(false);
+      setSuccessMsg(
+        `📲 SMS dispatched to ${contact.name} (${contact.phone}) via Fast2SMS! Waiting for them to tap the link and join...`
+      );
 
-      // Initialize in-browser WebRTC audio stream via laptop mic & speakers
+      // Initialize in-browser WebRTC audio stream using call._id (matching the link in SMS)
       await WebRTCService.startCall({
-        callId: call.providerCallId,
+        callId: call._id,
         userId: 'patient',
+        onCallConnected: () => {
+          // Stop ringing immediately when caregiver joins
+          if (ringHandleRef.current) {
+            ringHandleRef.current.stop();
+            ringHandleRef.current = null;
+          }
+          playReminderChime();
+          setActiveCall((prev) => (prev ? { ...prev, status: 'CONNECTED' } : null));
+          setSuccessMsg(`🎉 ${contact.name} joined the audio call! You can speak now.`);
+        },
         onCallEnded: () => {
+          if (ringHandleRef.current) {
+            ringHandleRef.current.stop();
+            ringHandleRef.current = null;
+          }
           setActiveCall(null);
           fetchData();
         },
       });
 
-      setActiveCall(call);
-      setCallDuration(0);
-      setIsMuted(false);
-      setSuccessMsg(`WebRTC in-browser audio call connected to ${contact.name}. You can speak now!`);
       await fetchData();
     } catch (err: any) {
       if (ringHandleRef.current) {
@@ -349,7 +365,7 @@ export const Calls: React.FC = () => {
 
       // Connect WebRTC audio
       await WebRTCService.startCall({
-        callId: res.call.providerCallId,
+        callId: res.call._id,
         userId: 'patient',
         onCallEnded: () => {
           setActiveCall(null);

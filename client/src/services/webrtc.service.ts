@@ -5,6 +5,7 @@ export interface WebRTCCallOptions {
   userId?: string;
   onRemoteStream?: (stream: MediaStream) => void;
   onAudioLevel?: (level: number) => void;
+  onCallConnected?: () => void;
   onCallEnded?: () => void;
   onError?: (err: Error) => void;
 }
@@ -89,6 +90,9 @@ export class WebRTCService {
     this.peerConnection.ontrack = (event) => {
       console.log('[WebRTCService] Remote audio track received!');
       const remoteStream = event.streams[0];
+      if (options.onCallConnected) {
+        options.onCallConnected();
+      }
       if (options.onRemoteStream) {
         options.onRemoteStream(remoteStream);
       }
@@ -121,6 +125,9 @@ export class WebRTCService {
     // When the other person (caregiver guest) joins the room, send an offer immediately
     socket.on('webrtc-peer-joined', async () => {
       console.log('[WebRTCService] Caregiver joined room! Initiating audio offer...');
+      if (options.onCallConnected) {
+        options.onCallConnected();
+      }
       try {
         if (!this.peerConnection) return;
         const offer = await this.peerConnection.createOffer();
@@ -144,6 +151,9 @@ export class WebRTCService {
           callId: options.callId,
           sdp: answer,
         });
+        if (options.onCallConnected) {
+          options.onCallConnected();
+        }
       } catch (e) {
         console.error('[WebRTCService] Error handling offer:', e);
       }
@@ -153,6 +163,10 @@ export class WebRTCService {
       try {
         if (!this.peerConnection) return;
         await this.peerConnection.setRemoteDescription(new RTCSessionDescription(sdp));
+        console.log('[WebRTCService] Remote peer answered. Call is live!');
+        if (options.onCallConnected) {
+          options.onCallConnected();
+        }
       } catch (e) {
         console.error('[WebRTCService] Error handling answer:', e);
       }
