@@ -14,10 +14,10 @@ const envSchema = z.object({
   JWT_EXPIRES_IN: z.string().default('7d'),
   LLM_PROVIDER: z.enum(['mock', 'gemini', 'openai']).default('mock'),
   GEMINI_API_KEY: z.string().optional().default(''),
-  OPENAI_API_KEY: z.string().optional().default(''),
-  TWILIO_ACCOUNT_SID: z.string().optional().default(''),
-  TWILIO_AUTH_TOKEN: z.string().optional().default(''),
-  TWILIO_PHONE_NUMBER: z.string().optional().default(''),
+  TELEPHONY_PROVIDER: z.enum(['webrtc', 'mock']).default('webrtc'),
+  FAST2SMS_API_KEY: z.string().optional().default(''),
+  CLOUDFLARE_TUNNEL_URL: z.string().optional().default(''),
+  AUTO_START_TUNNEL: z.enum(['true', 'false']).default('false'),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);

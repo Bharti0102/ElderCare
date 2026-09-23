@@ -10,6 +10,7 @@ import { Calls } from './pages/Calls';
 import { Prescription } from './pages/Prescription';
 import { Chat } from './pages/Chat';
 import { Profile } from './pages/Profile';
+import { CallJoin } from './pages/CallJoin';
 import { AuthProvider } from './context/AuthContext';
 
 export const App: React.FC = () => {
@@ -20,6 +21,9 @@ export const App: React.FC = () => {
           <Route path="/landing" element={<Landing />} />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
+
+          {/* Public WebRTC Call Join (Zero Auth Required for Caregivers) */}
+          <Route path="/call/join/:callId" element={<CallJoin />} />
 
           {/* Main Shell Layout */}
           <Route element={<Shell />}>

@@ -19,8 +19,24 @@ import {
   Check,
   X,
   FileText,
+  Mic,
+  MicOff,
+  Copy,
+  Share2,
+  Globe,
+  Smartphone,
+  Send,
+  ExternalLink,
 } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { WebRTCService } from '../services/webrtc.service';
+import {
+  getTunnelStatus,
+  startTunnel,
+  sendTestSms,
+  TunnelStatusResponse,
+} from '../services/tunnel.service';
+
 import {
   initiateCaregiverCall,
   getCalls,
@@ -38,7 +54,6 @@ import {
   getHospitalTarget,
 } from '../services/appointment.service';
 import {
-  speakText,
   playReminderChime,
   startTelephoneRinging,
   playHangupTone,
@@ -62,6 +77,8 @@ export const Calls: React.FC = () => {
   const [activeCall, setActiveCall] = useState<Call | null>(null);
   const [callDuration, setCallDuration] = useState(0);
   const [isDialing, setIsDialing] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
 
   // Hospital form & AI calling state
   const [hospitalName, setHospitalName] = useState('Metropolitan Community Health Center');
@@ -79,6 +96,11 @@ export const Calls: React.FC = () => {
   const [isAiCalling, setIsAiCalling] = useState(false);
   const [isConfirmingAppointment, setIsConfirmingAppointment] = useState(false);
   const [telephonyStatus, setTelephonyStatus] = useState<TelephonyStatus | null>(null);
+  const [tunnelStatus, setTunnelStatus] = useState<TunnelStatusResponse | null>(null);
+  const [isStartingTunnel, setIsStartingTunnel] = useState(false);
+  const [isSendingTestSms, setIsSendingTestSms] = useState(false);
+  const [testSmsPhone, setTestSmsPhone] = useState('+918683072836');
+  const [showTestSmsInput, setShowTestSmsInput] = useState(false);
 
   // Audio ringing controller ref
   const ringHandleRef = useRef<{ stop: () => void } | null>(null);
@@ -108,6 +130,11 @@ export const Calls: React.FC = () => {
       // Fetch telephony provider info
       getTelephonyStatus()
         .then(setTelephonyStatus)
+        .catch(() => {});
+
+      // Fetch Cloudflare tunnel & Fast2SMS info
+      getTunnelStatus()
+        .then(setTunnelStatus)
         .catch(() => {});
 
       // Check if there is an active ongoing call
@@ -160,6 +187,75 @@ export const Calls: React.FC = () => {
     };
   }, [activeCall]);
 
+  const handleToggleMute = () => {
+    const muted = WebRTCService.toggleMute();
+    setIsMuted(muted);
+  };
+
+  const getMobileJoinUrl = (callId: string) => {
+    const base = tunnelStatus?.effectiveClientUrl || window.location.origin;
+    return `${base.replace(/\/$/, '')}/call/join/${callId}`;
+  };
+
+  const handleCopyCallLink = (callId: string) => {
+    const url = getMobileJoinUrl(callId);
+    navigator.clipboard.writeText(url).then(() => {
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 3000);
+    });
+  };
+
+  const handleShareWhatsApp = (call: Call) => {
+    const url = getMobileJoinUrl(call._id);
+    const cleanPhone = (call.phoneNumber || '').replace(/[^0-9]/g, '');
+    const text = encodeURIComponent(
+      `Urgent Call: Your elder parent (${call.contactName}) is calling you on ElderCare AI. Tap here to join the audio call immediately: ${url}`
+    );
+    const waUrl = cleanPhone
+      ? `https://wa.me/${cleanPhone}?text=${text}`
+      : `https://api.whatsapp.com/send?text=${text}`;
+    window.open(waUrl, '_blank');
+  };
+
+  const handleStartTunnel = async () => {
+    try {
+      setIsStartingTunnel(true);
+      setError(null);
+      const res = await startTunnel();
+      setSuccessMsg(`Cloudflare Tunnel connected! Public URL: ${res.url}`);
+      const updated = await getTunnelStatus();
+      setTunnelStatus(updated);
+      setTimeout(() => setSuccessMsg(null), 6000);
+    } catch (err: any) {
+      setError(err.response?.data?.error?.message || err.message || 'Failed to start Cloudflare Tunnel');
+    } finally {
+      setIsStartingTunnel(false);
+    }
+  };
+
+  const handleSendTestSms = async () => {
+    if (!testSmsPhone) {
+      setError('Please enter a valid phone number for SMS test');
+      return;
+    }
+    try {
+      setIsSendingTestSms(true);
+      setError(null);
+      const res = await sendTestSms(testSmsPhone, 'Family Caregiver');
+      setSuccessMsg(
+        res.simulated
+          ? `[Simulated] SMS logged to console for ${testSmsPhone}. Join link: ${res.joinUrl}`
+          : `✅ Live Fast2SMS dispatched to ${testSmsPhone}! Check your phone.`
+      );
+      setShowTestSmsInput(false);
+      setTimeout(() => setSuccessMsg(null), 8000);
+    } catch (err: any) {
+      setError(err.response?.data?.error?.message || err.message || 'Failed to send test SMS');
+    } finally {
+      setIsSendingTestSms(false);
+    }
+  };
+
   const handleStartCaregiverCall = async (contact: EmergencyContact) => {
     try {
       setIsDialing(true);
@@ -175,29 +271,35 @@ export const Calls: React.FC = () => {
         name: contact.name,
       });
 
+      // Stop ringing once call request is accepted
+      if (ringHandleRef.current) {
+        ringHandleRef.current.stop();
+        ringHandleRef.current = null;
+      }
+
+      // Initialize in-browser WebRTC audio stream via laptop mic & speakers
+      await WebRTCService.startCall({
+        callId: call.providerCallId,
+        userId: 'patient',
+        onCallEnded: () => {
+          setActiveCall(null);
+          fetchData();
+        },
+      });
+
       setActiveCall(call);
       setCallDuration(0);
-
-      // After 2 realistic rings (~3.5 seconds), connect and let caregiver speak out loud
-      setTimeout(() => {
-        if (ringHandleRef.current) {
-          ringHandleRef.current.stop();
-          ringHandleRef.current = null;
-        }
-        setActiveCall((prev) => (prev ? { ...prev, status: 'CONNECTED' } : null));
-        speakText(
-          `Hello! This is ${contact.name}, your ${contact.relationship}. I just received your ElderCare check-in alert. I'm right here with you, how are you feeling?`
-        );
-      }, 3500);
-
+      setIsMuted(false);
+      setSuccessMsg(`WebRTC in-browser audio call connected to ${contact.name}. You can speak now!`);
       await fetchData();
     } catch (err: any) {
       if (ringHandleRef.current) {
         ringHandleRef.current.stop();
         ringHandleRef.current = null;
       }
-      setError(err.message || 'Failed to initiate phone call');
-      speakText('Could not complete call. Please check your emergency contacts.');
+      WebRTCService.endCall();
+      const msg = err.response?.data?.error?.message || err.message || 'Failed to initiate audio call';
+      setError(msg);
     } finally {
       setIsDialing(false);
     }
@@ -211,16 +313,17 @@ export const Calls: React.FC = () => {
         ringHandleRef.current = null;
       }
       playHangupTone();
+      WebRTCService.endCall();
       await hangupCall(activeCall._id);
-      speakText('Call disconnected.');
       setActiveCall(null);
+      setIsMuted(false);
       await fetchData();
     } catch (err: any) {
-      setError(err.message || 'Failed to end call');
+      setError(err.response?.data?.error?.message || err.message || 'Failed to end call');
     }
   };
 
-  // Mode A: Direct User Call to Hospital
+  // Mode A: Direct User Call to Hospital via WebRTC
   const handleStartDirectHospitalCall = async () => {
     try {
       setIsDialing(true);
@@ -239,29 +342,34 @@ export const Calls: React.FC = () => {
         patientNotes,
       });
 
+      if (ringHandleRef.current) {
+        ringHandleRef.current.stop();
+        ringHandleRef.current = null;
+      }
+
+      // Connect WebRTC audio
+      await WebRTCService.startCall({
+        callId: res.call.providerCallId,
+        userId: 'patient',
+        onCallEnded: () => {
+          setActiveCall(null);
+          fetchData();
+        },
+      });
+
       setActiveCall(res.call);
       setCallDuration(0);
-
-      // After realistic ringing period (~3.5s), hospital receptionist speaks
-      setTimeout(() => {
-        if (ringHandleRef.current) {
-          ringHandleRef.current.stop();
-          ringHandleRef.current = null;
-        }
-        setActiveCall((prev) => (prev ? { ...prev, status: 'CONNECTED' } : null));
-        speakText(
-          `Thank you for calling ${hospitalName}, ${department}. My name is reception coordinator. How may I assist you with your appointment today?`
-        );
-      }, 3500);
-
-      setSuccessMsg(`Direct call connected to ${hospitalName} reception.`);
+      setIsMuted(false);
+      setSuccessMsg(`WebRTC audio call connected to ${hospitalName} reception.`);
       await fetchData();
     } catch (err: any) {
       if (ringHandleRef.current) {
         ringHandleRef.current.stop();
         ringHandleRef.current = null;
       }
-      setError(err.message || 'Failed to connect to hospital reception');
+      WebRTCService.endCall();
+      const msg = err.response?.data?.error?.message || err.message || 'Failed to connect to hospital reception';
+      setError(msg);
     } finally {
       setIsDialing(false);
     }
@@ -296,7 +404,6 @@ export const Calls: React.FC = () => {
       setAiCallResult(res);
       setSuccessMsg(`AI appointment inquiry completed! Proposed slot found.`);
       playReminderChime();
-      speakText(`Appointment found with ${doctorName} on ${preferredDate} at ${preferredTime}. Please review and confirm.`);
       await fetchData();
     } catch (err: any) {
       if (ringHandleRef.current) {
@@ -317,7 +424,6 @@ export const Calls: React.FC = () => {
       playReminderChime();
       await confirmAppointment(apptId, patientNotes);
       setSuccessMsg('Appointment successfully confirmed and added to your schedule!');
-      speakText('Your appointment is confirmed. We will remind you beforehand.');
       setAiCallResult(null);
       await fetchData();
       setTimeout(() => setSuccessMsg(null), 5000);
@@ -404,29 +510,130 @@ export const Calls: React.FC = () => {
         </div>
       </div>
 
-      {/* Telephony Status Notice (Twilio Voice Trial) */}
-      {telephonyStatus && telephonyStatus.isTrial && (
-        <div className="p-4 bg-gradient-to-r from-sky-50 via-indigo-50 to-sky-50 border border-sky-200/80 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-xs">
-          <div className="flex items-start sm:items-center gap-3">
-            <span className="w-2.5 h-2.5 rounded-full bg-sky-500 animate-pulse mt-0.5 sm:mt-0 flex-shrink-0" />
-            <div>
-              <span className="font-bold text-sky-900">
-                {telephonyStatus.message || 'Twilio Voice (Trial Mode Active)'}:
-              </span>{' '}
-              <span className="text-sky-800">
-                {telephonyStatus.activeFromNumber
-                  ? `Live calls routed through verified number ${telephonyStatus.activeFromNumber}.`
-                  : 'Authenticated without purchased number. Voice simulation & PSTN trial mode ready.'}
+      {/* Cloudflare Public Mobile Gateway & Fast2SMS Gateway Card */}
+      <div className="p-5 bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 border border-indigo-800/50 rounded-3xl text-white shadow-xl space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="p-1.5 rounded-lg bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                <Globe className="w-4 h-4" />
+              </span>
+              <span className="font-extrabold text-sm sm:text-base text-white tracking-wide">
+                Cloudflare Mobile Gateway & Fast2SMS Delivery
+              </span>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                Live HTTPS
               </span>
             </div>
+            <p className="text-xs text-indigo-200/80 leading-relaxed max-w-2xl">
+              Caregiver links are routed via secure Cloudflare HTTPS. When Fast2SMS sends an alert to Indian mobile numbers (+91), tapping the link on mobile Safari/Chrome instantly establishes full-duplex WebRTC audio without installing any app.
+            </p>
           </div>
-          <div className="flex items-center gap-2 self-start sm:self-auto">
-            <span className="px-2.5 py-1 rounded-lg bg-sky-100/90 text-sky-800 font-semibold border border-sky-300 flex-shrink-0">
-              Twilio Trial Connected
-            </span>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            {tunnelStatus?.tunnel?.active ? (
+              <div className="flex items-center gap-2">
+                <div className="px-3 py-1.5 rounded-xl bg-emerald-950/70 border border-emerald-500/40 text-emerald-300 text-xs font-mono font-bold flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                  <span className="truncate max-w-[200px] sm:max-w-[260px]">
+                    {tunnelStatus.effectiveClientUrl}
+                  </span>
+                </div>
+                <a
+                  href={tunnelStatus.effectiveClientUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-indigo-200 transition-colors"
+                  title="Open public tunnel domain"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                </a>
+              </div>
+            ) : (
+              <button
+                onClick={handleStartTunnel}
+                disabled={isStartingTunnel}
+                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-extrabold text-xs flex items-center gap-2 shadow-lg shadow-indigo-900/40 transition-all disabled:opacity-50"
+              >
+                {isStartingTunnel ? (
+                  <>
+                    <RotateCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Connecting Tunnel...</span>
+                  </>
+                ) : (
+                  <>
+                    <Globe className="w-3.5 h-3.5" />
+                    <span>Start Cloudflare Tunnel</span>
+                  </>
+                )}
+              </button>
+            )}
+
+            <button
+              onClick={() => setShowTestSmsInput(!showTestSmsInput)}
+              className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 active:scale-95 text-white font-bold text-xs flex items-center gap-1.5 border border-white/15 transition-all"
+            >
+              <Smartphone className="w-3.5 h-3.5 text-amber-300" />
+              <span>{showTestSmsInput ? 'Hide SMS Test' : 'Test Real SMS (+91)'}</span>
+            </button>
           </div>
         </div>
-      )}
+
+        {/* Expandable Test SMS Panel */}
+        {showTestSmsInput && (
+          <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 text-xs animate-in fade-in duration-150">
+            <div className="flex items-center gap-2 text-indigo-200">
+              <span className="font-semibold text-white">Send Instant Call Join Link:</span>
+              <span>Fast2SMS will deliver a 1-tap WebRTC call link to this phone.</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={testSmsPhone}
+                onChange={(e) => setTestSmsPhone(e.target.value)}
+                placeholder="+918683072836"
+                className="px-3 py-1.5 rounded-xl bg-slate-800 text-white border border-slate-700 font-mono text-xs focus:outline-hidden focus:ring-2 focus:ring-indigo-500 w-40"
+              />
+              <button
+                onClick={handleSendTestSms}
+                disabled={isSendingTestSms}
+                className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-extrabold flex items-center gap-1.5 shadow-md disabled:opacity-50 transition-all"
+              >
+                {isSendingTestSms ? (
+                  <RotateCw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Send className="w-3.5 h-3.5" />
+                )}
+                <span>Send SMS Now</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Status Pills */}
+        <div className="pt-2 border-t border-white/10 flex flex-wrap items-center gap-2 text-[11px]">
+          <span className="px-2.5 py-1 rounded-lg bg-white/10 text-slate-200 flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+            WebRTC Engine:{' '}
+            <strong>
+              {telephonyStatus?.provider ? `${telephonyStatus.provider} (Device VoIP)` : 'Full-Duplex Device VoIP'}
+            </strong>
+          </span>
+          <span className="px-2.5 py-1 rounded-lg bg-white/10 text-slate-200 flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
+            SMS Gateway:{' '}
+            <strong className="text-amber-200">
+              {tunnelStatus?.sms?.provider || 'Fast2SMS Active'}
+            </strong>
+          </span>
+          <span className="px-2.5 py-1 rounded-lg bg-white/10 text-slate-200 flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-sky-400" />
+            Traveral:{' '}
+            <strong>Google STUN + Cloudflare Edge</strong>
+          </span>
+        </div>
+      </div>
 
       {/* Tabs: Caregiver Calling vs Hospital Calling */}
       <div className="flex border-b border-slate-200 gap-4">
@@ -497,7 +704,7 @@ export const Calls: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex items-center gap-4 sm:gap-6 self-end sm:self-center">
+            <div className="flex items-center gap-3 sm:gap-4 self-end sm:self-center">
               <div className="text-right">
                 <span className="text-xs uppercase tracking-wider text-emerald-200 block font-bold">
                   Duration
@@ -507,9 +714,23 @@ export const Calls: React.FC = () => {
                 </span>
               </div>
 
+              {/* Mute / Unmute Microphone */}
+              <button
+                onClick={handleToggleMute}
+                className={`px-4 py-3.5 rounded-2xl font-bold text-sm flex items-center gap-1.5 transition-transform active:scale-95 shadow-md ${
+                  isMuted
+                    ? 'bg-amber-400 hover:bg-amber-500 text-slate-900 shadow-amber-900/30'
+                    : 'bg-white/20 hover:bg-white/30 text-white border border-white/30'
+                }`}
+                title={isMuted ? 'Unmute microphone' : 'Mute microphone'}
+              >
+                {isMuted ? <MicOff className="w-5 h-5 text-slate-900" /> : <Mic className="w-5 h-5" />}
+                <span>{isMuted ? 'Muted' : 'Mute'}</span>
+              </button>
+
               <button
                 onClick={handleEndCall}
-                className="px-6 py-4 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-base shadow-lg shadow-rose-900/30 flex items-center gap-2 transition-transform active:scale-95"
+                className="px-6 py-3.5 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-sm sm:text-base shadow-lg shadow-rose-900/30 flex items-center gap-2 transition-transform active:scale-95"
               >
                 <PhoneOff className="w-5 h-5" />
                 <span>End Call</span>
@@ -520,17 +741,78 @@ export const Calls: React.FC = () => {
           {/* Live In-Call Audio Waveform & Status */}
           <div className="mt-5 pt-4 border-t border-white/15 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
             <div className="flex items-center gap-3">
-              <VoiceWaveform state={activeCall.status === 'CALLING' ? 'listening' : 'speaking'} />
+              <VoiceWaveform state={isMuted ? 'idle' : 'speaking'} />
               <span className="font-semibold text-emerald-100">
-                {activeCall.status === 'CALLING'
-                  ? 'Ringing destination phone line (Web Audio VoIP)...'
-                  : 'Live voice call connected • Audio active'}
+                {isMuted
+                  ? 'Microphone muted • Click "Muted" to speak'
+                  : 'WebRTC In-Browser Audio Active • Speaking via Laptop Mic & Speakers'}
               </span>
             </div>
             <div className="flex items-center gap-2 text-sky-200/80">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span>Full-Duplex VoIP Session</span>
+              <span>Full-Duplex Device VoIP</span>
             </div>
+          </div>
+
+          {/* Instant One-Tap Share Bar for Caregiver */}
+          <div className="mt-4 p-3.5 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2.5 text-white min-w-0">
+              <div className="p-2 rounded-xl bg-white/20 text-emerald-300 flex-shrink-0">
+                <Share2 className="w-4 h-4" />
+              </div>
+              <div className="min-w-0">
+                <span className="font-bold text-white block">
+                  Instant One-Tap Caregiver Link:
+                </span>
+                <span className="text-sky-200 truncate block text-[11px] font-mono">
+                  {getMobileJoinUrl(activeCall._id)}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                onClick={() => handleCopyCallLink(activeCall._id)}
+                className="px-3.5 py-2 rounded-xl bg-white/20 hover:bg-white/30 text-white font-bold flex items-center gap-1.5 transition-all shadow-xs active:scale-95"
+                title="Copy join link"
+              >
+                {copiedLink ? (
+                  <>
+                    <Check className="w-4 h-4 text-emerald-300" />
+                    <span className="text-emerald-300">Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-4 h-4" />
+                    <span>Copy Link</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                onClick={() => handleShareWhatsApp(activeCall)}
+                className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold flex items-center gap-1.5 transition-all shadow-md active:scale-95"
+                title="Send link via WhatsApp"
+              >
+                <span>💬 Send via WhatsApp</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Automated Phone Delivery Notice */}
+          <div className="mt-3 px-3.5 py-2 rounded-xl bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-between text-xs text-white">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+              <span>
+                <strong>📲 Automated SMS Link Dispatched</strong> to{' '}
+                <span className="font-semibold text-emerald-200">{activeCall.contactName}</span> (
+                <span className="font-mono text-emerald-100">{activeCall.phoneNumber}</span>).
+                Caregiver can tap the link on their mobile to talk immediately!
+              </span>
+            </div>
+            <span className="hidden sm:inline-block px-2 py-0.5 rounded-md bg-emerald-400/30 font-bold text-[10px] text-emerald-100">
+              Auto-Delivered
+            </span>
           </div>
         </div>
       )}

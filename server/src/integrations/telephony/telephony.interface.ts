@@ -29,6 +29,12 @@ export interface TelephonyProviderStatus {
   activeFromNumber?: string | null;
   message: string;
   instructions?: string;
+  secondaryProvider?: {
+    name: string;
+    configured: boolean;
+    accountSid?: string;
+    message?: string;
+  };
 }
 
 export interface ITelephonyProvider {

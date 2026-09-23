@@ -13,7 +13,8 @@
     "typecheck": "npm run server:typecheck && npm run client:typecheck",
     "build": "npm run client:build && npm run server:build",
     "start": "npm --prefix server run start",
-    "dev": "npm run client:build && npm --prefix server run dev"
+    "dev": "npm run client:build && npm --prefix server run dev",
+    "tunnel": "node scripts/start-tunnel.mjs"
   },
   "keywords": [
     "eldercare",

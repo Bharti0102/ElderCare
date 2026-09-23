@@ -72,6 +72,12 @@ export interface TelephonyStatus {
   activeFromNumber?: string | null;
   message: string;
   instructions?: string;
+  secondaryProvider?: {
+    name: string;
+    configured: boolean;
+    accountSid?: string;
+    message?: string;
+  };
 }
 
 export const getTelephonyStatus = async (): Promise<TelephonyStatus> => {

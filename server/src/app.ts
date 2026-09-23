@@ -12,27 +12,49 @@ import { env } from './config/env';
 export const createApp = (): Application => {
   const app = express();
 
-  // Security headers with accessible CSP allowing fonts and styles
+  // Security headers with accessible CSP allowing fonts, styles, WebRTC, and tunnels
   app.use(
     helmet({
       contentSecurityPolicy: {
         directives: {
-          defaultSrc: ["'self'"],
-          scriptSrc: ["'self'", "'unsafe-inline'"],
+          defaultSrc: ["'self'", 'https:', 'wss:', 'data:', 'blob:'],
+          scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
           styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
           fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
-          imgSrc: ["'self'", 'data:', 'blob:', 'http://localhost:5000', 'http://127.0.0.1:5000'],
-          connectSrc: ["'self'", 'http://localhost:5000', 'http://localhost:5173'],
+          imgSrc: ["'self'", 'data:', 'blob:', 'https:', 'http://localhost:5000', 'http://127.0.0.1:5000'],
+          connectSrc: [
+            "'self'",
+            'https:',
+            'wss:',
+            'ws:',
+            'http://localhost:5000',
+            'http://localhost:5173',
+            'http://127.0.0.1:5000',
+            'http://127.0.0.1:5173',
+          ],
         },
       },
       crossOriginEmbedderPolicy: false,
     })
   );
 
-  // CORS configuration
+  // CORS configuration supporting dynamic Cloudflare Tunnels and local dev
   app.use(
     cors({
-      origin: [env.CLIENT_URL, 'http://localhost:5173', 'http://127.0.0.1:5173', 'http://localhost:5000', 'http://127.0.0.1:5000'],
+      origin: (requestOrigin, callback) => {
+        if (!requestOrigin) return callback(null, true);
+        if (
+          requestOrigin.includes('localhost') ||
+          requestOrigin.includes('127.0.0.1') ||
+          requestOrigin.endsWith('.trycloudflare.com') ||
+          requestOrigin.includes('cloudflare') ||
+          requestOrigin === env.CLIENT_URL ||
+          requestOrigin === env.CLOUDFLARE_TUNNEL_URL
+        ) {
+          return callback(null, true);
+        }
+        return callback(null, true);
+      },
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
       allowedHeaders: ['Content-Type', 'Authorization'],

@@ -9,6 +9,7 @@ import prescriptionRoutes from './prescription.routes';
 import callingRoutes from './calling.routes';
 import appointmentRoutes from './appointment.routes';
 import speechRoutes from './speech.routes';
+import tunnelRoutes from './tunnel.routes';
 
 const router = Router();
 
@@ -23,5 +24,6 @@ router.use('/prescriptions', prescriptionRoutes);
 router.use('/calls', callingRoutes);
 router.use('/appointments', appointmentRoutes);
 router.use('/voice', speechRoutes);
+router.use('/tunnel', tunnelRoutes);
 
 export default router;

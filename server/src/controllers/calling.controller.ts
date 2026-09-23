@@ -108,4 +108,18 @@ export class CallingController {
       next(error);
     }
   }
+
+  public static async getPublicCallInfo(
+    req: any,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const id = String(req.params.id);
+      const call = await CallingService.getPublicCallInfo(id);
+      sendSuccess(res, { call }, 'Call room details retrieved successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
 }

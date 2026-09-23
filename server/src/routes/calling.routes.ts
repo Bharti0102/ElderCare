@@ -4,7 +4,10 @@ import { authenticate } from '../middleware/auth.middleware';
 
 const router = Router();
 
-// All calling endpoints require authentication
+// Public call room endpoint for guest caregiver join screen
+router.get('/public/:id', CallingController.getPublicCallInfo);
+
+// All subsequent calling endpoints require authentication
 router.use(authenticate);
 
 // Caregiver direct-dial

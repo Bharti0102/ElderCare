@@ -3,6 +3,8 @@ import { CaregiverService } from './caregiver.service';
 import { TelephonyFactory } from '../../integrations/telephony';
 import { InitiateCaregiverCallInput } from '../../validators/calling.validator';
 import { AppError } from '../../utils/apiError';
+import { User } from '../../models/User';
+import { SmsService } from '../../integrations/notifications/sms.service';
 
 export class CallingService {
   /**
@@ -16,10 +18,14 @@ export class CallingService {
     // 1. Resolve authorized caregiver contact
     const contact = await CaregiverService.resolveCaregiver(userId, input);
 
-    // 2. Invoke telephony provider
+    // Get user caller info if available
+    const user = await User.findById(userId).select('phone name');
+
+    // 2. Invoke telephony provider (WebRTC in-browser audio engine)
     const telephony = TelephonyFactory.getProvider();
     const result = await telephony.initiateCall({
       to: contact.phone,
+      from: user?.phone || undefined,
       contactName: contact.name,
       relationship: contact.relationship,
       userMessage: input?.message,
@@ -39,6 +45,16 @@ export class CallingService {
       notes: input?.message || 'Caregiver direct-dial initiated',
     });
 
+    // 4. Automatically dispatch instant one-tap call link SMS to caregiver's phone
+    SmsService.sendCallLinkSms({
+      recipientPhone: contact.phone,
+      recipientName: contact.name,
+      callerName: (user as any)?.name || 'Mom / Dad',
+      callId: call._id.toString(),
+    }).catch((err) => {
+      console.warn('[CallingService] Notice dispatching automated SMS:', err.message);
+    });
+
     return call;
   }
 
@@ -55,9 +71,11 @@ export class CallingService {
       notes?: string;
     }
   ): Promise<ICall> {
+    const user = await User.findById(userId).select('phone name');
     const telephony = TelephonyFactory.getProvider();
     const result = await telephony.initiateCall({
       to: params.phoneNumber,
+      from: user?.phone || undefined,
       contactName: params.contactName,
       relationship: params.relationship,
       userMessage: params.notes,
@@ -73,6 +91,16 @@ export class CallingService {
       status: result.status,
       startedAt: result.startedAt,
       notes: params.notes || `${params.type} call initiated`,
+    });
+
+    // Automatically dispatch instant call link SMS
+    SmsService.sendCallLinkSms({
+      recipientPhone: params.phoneNumber,
+      recipientName: params.contactName,
+      callerName: (user as any)?.name || 'Patient',
+      callId: call._id.toString(),
+    }).catch((err) => {
+      console.warn('[CallingService] Notice dispatching automated direct SMS:', err.message);
     });
 
     return call;
@@ -208,18 +236,24 @@ export class CallingService {
    * Get active telephony provider status & trial information
    */
   public static async getTelephonyStatus() {
-    const telephony = TelephonyFactory.getProvider();
-    if (telephony.getProviderStatus) {
-      return await telephony.getProviderStatus();
+    return await TelephonyFactory.getCombinedStatus();
+  }
+
+  /**
+   * Get public call info for guest caregiver join screen
+   */
+  public static async getPublicCallInfo(callId: string) {
+    const call = await Call.findById(callId).populate('userId', 'name').lean();
+    if (!call) {
+      throw new AppError('Call not found or expired', 404, 'NOT_FOUND');
     }
     return {
-      provider: telephony.name,
-      configured: true,
-      isTrial: false,
-      hasPurchasedNumber: false,
-      hasVerifiedCallerId: false,
-      activeFromNumber: null,
-      message: 'Telephony provider active.',
+      _id: call._id,
+      callerName: (call.userId as any)?.name || 'Elderly Parent',
+      contactName: call.contactName,
+      relationship: call.relationship,
+      status: call.status,
+      startedAt: call.startedAt,
     };
   }
 }
