@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Bell,
   Clock,
@@ -14,6 +14,9 @@ import {
   X,
   MessageSquare,
   Check,
+  Volume2,
+  VolumeX,
+  Radio,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import {
@@ -24,6 +27,15 @@ import {
   completeReminder,
   snoozeReminder,
 } from '../services/reminder.service';
+import {
+  getVoiceSettings,
+  saveVoiceSettings,
+  speakText,
+  stopSpeaking,
+  announceReminder,
+  announceDueReminders,
+  VoiceSettings,
+} from '../services/voiceNotification.service';
 import { Reminder, ReminderCategory, ReminderRepeat, CreateReminderDTO } from '../types';
 
 export const Reminders: React.FC = () => {
@@ -32,6 +44,12 @@ export const Reminders: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'ALL' | 'PENDING' | 'COMPLETED' | 'SNOOZED'>('ALL');
+
+  // Voice State
+  const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>(getVoiceSettings);
+  const [speakingReminderId, setSpeakingReminderId] = useState<string | null>(null);
+  const [isAnnouncingDue, setIsAnnouncingDue] = useState(false);
+  const lastAnnouncedIdsRef = useRef<string>('');
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -59,6 +77,16 @@ export const Reminders: React.FC = () => {
       ]);
       setReminders(allList);
       setDueReminders(dueList);
+
+      // Check for newly due reminders to announce via voice
+      if (voiceSettings.enabled && voiceSettings.autoAnnounceDue && dueList.length > 0) {
+        const currentDueIds = dueList.map((r) => r._id).sort().join(',');
+        if (currentDueIds !== lastAnnouncedIdsRef.current) {
+          lastAnnouncedIdsRef.current = currentDueIds;
+          setIsAnnouncingDue(true);
+          announceDueReminders(dueList, () => setIsAnnouncingDue(false));
+        }
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to load reminders');
     } finally {
@@ -73,12 +101,61 @@ export const Reminders: React.FC = () => {
       try {
         const dueList = await getDueReminders();
         setDueReminders(dueList);
+        if (voiceSettings.enabled && voiceSettings.autoAnnounceDue && dueList.length > 0) {
+          const currentDueIds = dueList.map((r) => r._id).sort().join(',');
+          if (currentDueIds !== lastAnnouncedIdsRef.current) {
+            lastAnnouncedIdsRef.current = currentDueIds;
+            setIsAnnouncingDue(true);
+            announceDueReminders(dueList, () => setIsAnnouncingDue(false));
+          }
+        }
       } catch {
         // silent fail on poll
       }
     }, 30000);
-    return () => clearInterval(interval);
-  }, [activeTab]);
+
+    return () => {
+      clearInterval(interval);
+      stopSpeaking();
+    };
+  }, [activeTab, voiceSettings.enabled, voiceSettings.autoAnnounceDue]);
+
+  const handleToggleVoice = () => {
+    const updated = { ...voiceSettings, enabled: !voiceSettings.enabled };
+    setVoiceSettings(updated);
+    saveVoiceSettings(updated);
+    if (!updated.enabled) {
+      stopSpeaking();
+    } else {
+      speakText('Voice alerts are now active.', { playChimeFirst: true });
+    }
+  };
+
+  const handleTestVoice = () => {
+    speakText('Voice reminders are active and ready. Your care coordinator is listening!', {
+      playChimeFirst: true,
+    });
+  };
+
+  const handleSpeakReminder = (reminder: Reminder) => {
+    if (speakingReminderId === reminder._id) {
+      stopSpeaking();
+      setSpeakingReminderId(null);
+      return;
+    }
+    setSpeakingReminderId(reminder._id);
+    announceReminder(reminder, () => {
+      setSpeakingReminderId(null);
+    });
+  };
+
+  const handleAnnounceDueNow = () => {
+    if (dueReminders.length === 0) return;
+    setIsAnnouncingDue(true);
+    announceDueReminders(dueReminders, () => {
+      setIsAnnouncingDue(false);
+    });
+  };
 
   const handleOpenModal = () => {
     setTitle('');
@@ -110,8 +187,13 @@ export const Reminders: React.FC = () => {
         repeat,
       };
 
-      await createReminder(dto);
+      const created = await createReminder(dto);
       setIsModalOpen(false);
+
+      if (voiceSettings.enabled) {
+        speakText(`Your reminder for ${created.title} has been scheduled successfully!`);
+      }
+
       await fetchData();
     } catch (err: any) {
       setModalError(err.message || 'Failed to create reminder');
@@ -120,18 +202,28 @@ export const Reminders: React.FC = () => {
     }
   };
 
-  const handleComplete = async (id: string) => {
+  const handleComplete = async (id: string, reminderTitle?: string) => {
     try {
-      await completeReminder(id);
+      const res = await completeReminder(id);
+      if (voiceSettings.enabled) {
+        if (res.recurringNextDate) {
+          speakText(`Great job! ${reminderTitle || 'Reminder'} completed. Next occurrence scheduled.`);
+        } else {
+          speakText(`Well done! ${reminderTitle || 'Reminder'} marked as completed.`);
+        }
+      }
       await fetchData();
     } catch (err: any) {
       setError(err.message || 'Failed to complete reminder');
     }
   };
 
-  const handleSnooze = async (id: string, minutes = 10) => {
+  const handleSnooze = async (id: string, minutes = 10, reminderTitle?: string) => {
     try {
       await snoozeReminder(id, minutes);
+      if (voiceSettings.enabled) {
+        speakText(`${reminderTitle || 'Reminder'} snoozed for ${minutes} minutes.`);
+      }
       await fetchData();
     } catch (err: any) {
       setError(err.message || 'Failed to snooze reminder');
@@ -216,11 +308,11 @@ export const Reminders: React.FC = () => {
           </div>
           <h1 className="text-3xl font-extrabold text-slate-900">Medication & Daily Reminders</h1>
           <p className="text-slate-600 mt-1">
-            Manage your health routine with timed medication alerts, hydration checks, and recurring reminders.
+            Manage your health routine with timed medication alerts, voice notifications, and recurring schedules.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center flex-wrap gap-3">
           <Link
             to="/chat"
             className="elder-btn-secondary text-sm flex items-center gap-1.5"
@@ -239,7 +331,66 @@ export const Reminders: React.FC = () => {
         </div>
       </div>
 
-      {/* Due Reminders High Priority Alert Banner */}
+      {/* Voice Notification Controls & Accessibility Bar */}
+      <div className="elder-card p-4 bg-gradient-to-r from-brand-50 via-sky-50 to-indigo-50 border border-brand-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+        <div className="flex items-center gap-3">
+          <div
+            className={`p-2.5 rounded-2xl transition-colors ${
+              voiceSettings.enabled ? 'bg-brand-600 text-white' : 'bg-slate-200 text-slate-500'
+            }`}
+          >
+            {voiceSettings.enabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
+          </div>
+          <div>
+            <h4 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+              <span>ElderCare Voice Alerts</span>
+              {voiceSettings.enabled && (
+                <span className="flex items-center gap-1 text-xs text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full font-bold">
+                  <Radio className="w-3 h-3 animate-pulse" /> Active
+                </span>
+              )}
+            </h4>
+            <p className="text-xs text-slate-600">
+              {voiceSettings.enabled
+                ? 'Reads reminders aloud with gentle chimes and audible spoken guidance.'
+                : 'Spoken voice announcements are currently muted.'}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 self-end sm:self-center">
+          {voiceSettings.enabled && (
+            <button
+              onClick={handleTestVoice}
+              className="text-xs font-bold text-brand-700 hover:text-brand-900 bg-white hover:bg-brand-50 border border-brand-200 px-3 py-1.5 rounded-xl transition-colors"
+            >
+              Test Voice
+            </button>
+          )}
+          <button
+            onClick={handleToggleVoice}
+            className={`text-xs font-bold px-3.5 py-1.5 rounded-xl transition-all shadow-xs flex items-center gap-1.5 ${
+              voiceSettings.enabled
+                ? 'bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100'
+                : 'bg-brand-600 text-white hover:bg-brand-700'
+            }`}
+          >
+            {voiceSettings.enabled ? (
+              <>
+                <VolumeX className="w-3.5 h-3.5" />
+                <span>Mute Voice</span>
+              </>
+            ) : (
+              <>
+                <Volume2 className="w-3.5 h-3.5" />
+                <span>Enable Voice Alerts</span>
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Due Reminders High Priority Alert Banner with Voice Announcer */}
       {dueReminders.length > 0 && (
         <div className="elder-card p-6 bg-gradient-to-r from-amber-500/10 via-rose-500/10 to-brand-500/10 border-2 border-amber-400 shadow-lg">
           <div className="flex items-start gap-4">
@@ -247,16 +398,29 @@ export const Reminders: React.FC = () => {
               <AlertCircle className="w-7 h-7" />
             </div>
             <div className="flex-1 space-y-3">
-              <div>
-                <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-                  <span>Action Needed:</span>
-                  <span className="text-amber-800">
-                    {dueReminders.length} Reminder{dueReminders.length > 1 ? 's' : ''} Due Now!
-                  </span>
-                </h2>
-                <p className="text-sm text-slate-700">
-                  Please take your prescribed medicines or confirm your completed tasks below.
-                </p>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                    <span>Action Needed:</span>
+                    <span className="text-amber-800">
+                      {dueReminders.length} Reminder{dueReminders.length > 1 ? 's' : ''} Due Now!
+                    </span>
+                  </h2>
+                  <p className="text-sm text-slate-700">
+                    Please take your prescribed medicines or confirm your completed tasks below.
+                  </p>
+                </div>
+
+                <button
+                  onClick={handleAnnounceDueNow}
+                  className={`elder-btn-secondary text-xs font-bold flex items-center gap-2 self-start sm:self-center border-amber-300 bg-white hover:bg-amber-50 text-amber-900 transition-all ${
+                    isAnnouncingDue ? 'ring-2 ring-amber-500 animate-pulse' : ''
+                  }`}
+                  title="Listen to due reminders read aloud"
+                >
+                  <Volume2 className="w-4 h-4 text-amber-600" />
+                  <span>{isAnnouncingDue ? 'Speaking...' : '🔊 Read Due Aloud'}</span>
+                </button>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
@@ -279,14 +443,25 @@ export const Reminders: React.FC = () => {
 
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <button
-                        onClick={() => handleComplete(due._id)}
+                        onClick={() => handleSpeakReminder(due)}
+                        className={`p-1.5 rounded-xl border text-xs font-semibold transition-colors ${
+                          speakingReminderId === due._id
+                            ? 'bg-brand-600 text-white border-brand-600'
+                            : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-brand-50 hover:text-brand-700'
+                        }`}
+                        title="Read reminder aloud"
+                      >
+                        <Volume2 className={`w-4 h-4 ${speakingReminderId === due._id ? 'animate-pulse' : ''}`} />
+                      </button>
+                      <button
+                        onClick={() => handleComplete(due._id, due.title)}
                         className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl flex items-center gap-1 shadow-sm transition-transform active:scale-95"
                       >
                         <Check className="w-3.5 h-3.5" />
                         <span>Done</span>
                       </button>
                       <button
-                        onClick={() => handleSnooze(due._id, 10)}
+                        onClick={() => handleSnooze(due._id, 10, due.title)}
                         className="px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-800 text-xs font-bold rounded-xl flex items-center gap-1 transition-transform active:scale-95"
                         title="Snooze 10 minutes"
                       >
@@ -307,11 +482,11 @@ export const Reminders: React.FC = () => {
         <Sparkles className="w-5 h-5 text-sky-600 mt-0.5 flex-shrink-0" />
         <div className="text-sm text-sky-900">
           <span className="font-bold">Pro-tip for seniors: </span>
-          You can simply say or type to the AI Companion:
+          You can simply say or type to the AI Companion in Chat:
           <span className="italic font-medium text-sky-950 ml-1">
             "Remind me to take my blood pressure medicine at 8 PM every day"
           </span>
-          — and it will automatically schedule it for you!
+          — and it will automatically schedule and speak it for you!
         </div>
       </div>
 
@@ -380,6 +555,7 @@ export const Reminders: React.FC = () => {
           {reminders.map((reminder) => {
             const isCompleted = reminder.status === 'COMPLETED';
             const isSnoozed = reminder.status === 'SNOOZED';
+            const isSpeaking = speakingReminderId === reminder._id;
 
             return (
               <div
@@ -392,7 +568,9 @@ export const Reminders: React.FC = () => {
                     : reminder.category === 'APPOINTMENT'
                     ? 'border-l-amber-500'
                     : 'border-l-brand-500'
-                } ${isCompleted ? 'opacity-70 bg-slate-50/70' : 'bg-white'}`}
+                } ${isCompleted ? 'opacity-70 bg-slate-50/70' : 'bg-white'} ${
+                  isSpeaking ? 'ring-2 ring-brand-500 shadow-lg' : ''
+                }`}
               >
                 <div className="space-y-3">
                   {/* Category and Status Badge */}
@@ -461,17 +639,31 @@ export const Reminders: React.FC = () => {
                 {/* Actions Footer */}
                 <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
+                    {/* Speak / Read Aloud Button */}
+                    <button
+                      onClick={() => handleSpeakReminder(reminder)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 border transition-all ${
+                        isSpeaking
+                          ? 'bg-brand-600 text-white border-brand-600 ring-2 ring-brand-300'
+                          : 'bg-slate-50 hover:bg-brand-50 text-slate-700 hover:text-brand-700 border-slate-200'
+                      }`}
+                      title={isSpeaking ? 'Stop speaking' : 'Read reminder aloud'}
+                    >
+                      <Volume2 className={`w-3.5 h-3.5 ${isSpeaking ? 'animate-pulse text-white' : 'text-brand-600'}`} />
+                      <span>{isSpeaking ? 'Speaking...' : 'Read Aloud'}</span>
+                    </button>
+
                     {!isCompleted ? (
                       <>
                         <button
-                          onClick={() => handleComplete(reminder._id)}
+                          onClick={() => handleComplete(reminder._id, reminder.title)}
                           className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-xs transition-colors"
                         >
                           <CheckCircle2 className="w-4 h-4" />
                           <span>Done</span>
                         </button>
                         <button
-                          onClick={() => handleSnooze(reminder._id, 10)}
+                          onClick={() => handleSnooze(reminder._id, 10, reminder.title)}
                           className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 text-xs font-bold rounded-xl border border-amber-200 transition-colors"
                           title="Snooze 10 minutes"
                         >
