@@ -12,6 +12,7 @@ import {
 import { HealthData, Reminder } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import { AlertCircle, Volume2, ArrowRight, Check, X } from 'lucide-react';
+import { FloatingVoiceAssistant } from '../voice/FloatingVoiceAssistant';
 
 export const Shell: React.FC = () => {
   const { user } = useAuth();
@@ -174,6 +175,7 @@ export const Shell: React.FC = () => {
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Outlet context={{ health, serverStatus, refetchHealth: fetchHealth }} />
       </main>
+      <FloatingVoiceAssistant />
       <Footer />
     </div>
   );

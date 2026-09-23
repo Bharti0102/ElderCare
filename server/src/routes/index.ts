@@ -8,6 +8,7 @@ import reminderRoutes from './reminder.routes';
 import prescriptionRoutes from './prescription.routes';
 import callingRoutes from './calling.routes';
 import appointmentRoutes from './appointment.routes';
+import speechRoutes from './speech.routes';
 
 const router = Router();
 
@@ -21,5 +22,6 @@ router.use('/reminders', reminderRoutes);
 router.use('/prescriptions', prescriptionRoutes);
 router.use('/calls', callingRoutes);
 router.use('/appointments', appointmentRoutes);
+router.use('/voice', speechRoutes);
 
 export default router;

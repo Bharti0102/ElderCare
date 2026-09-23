@@ -236,3 +236,18 @@ export interface HospitalTarget {
   receptionPhone: string;
   prescriptionId?: string;
 }
+
+export interface VoiceProcessResponse {
+  reply: string;
+  transcript: string;
+  spokenText: string;
+  intent: string;
+  confidence: number;
+  suggestions: string[];
+  toolResults?: any[];
+  voiceSettings?: {
+    rate: number;
+    pitch: number;
+    volume: number;
+  };
+}

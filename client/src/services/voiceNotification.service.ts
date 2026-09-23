@@ -100,7 +100,7 @@ export const stopSpeaking = (): void => {
  */
 export const speakText = (
   text: string,
-  options?: { rate?: number; onEnd?: () => void; playChimeFirst?: boolean }
+  options?: { rate?: number; onEnd?: () => void; onError?: () => void; playChimeFirst?: boolean }
 ): void => {
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
     if (options?.onEnd) options.onEnd();
@@ -137,6 +137,10 @@ export const speakText = (
 
     if (options?.onEnd) {
       utterance.onend = options.onEnd;
+    }
+    if (options?.onError) {
+      utterance.onerror = options.onError;
+    } else if (options?.onEnd) {
       utterance.onerror = options.onEnd;
     }
 

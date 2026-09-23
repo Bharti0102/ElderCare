@@ -9,6 +9,11 @@ import {
   Loader2,
   Heart,
   ShieldAlert,
+  Mic,
+  MicOff,
+  Volume2,
+  VolumeX,
+  Square,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -17,6 +22,9 @@ import {
   clearChatHistory,
   ChatHistoryMessage,
 } from '../services/agent.service';
+import { useVoiceAssistant } from '../hooks/useVoiceAssistant';
+import { VoiceWaveform } from '../components/voice/VoiceWaveform';
+import { speakText } from '../services/voiceNotification.service';
 
 const INITIAL_SUGGESTIONS = [
   'Tell me a gentle story',
@@ -34,8 +42,40 @@ export const Chat: React.FC = () => {
   const [fetchingHistory, setFetchingHistory] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>(INITIAL_SUGGESTIONS);
   const [error, setError] = useState<string | null>(null);
+  const [autoVoiceReply, setAutoVoiceReply] = useState<boolean>(true);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const {
+    state: voiceState,
+    isListening,
+    isSpeaking,
+    transcript: voiceTranscript,
+    startListening,
+    stopListening,
+    handleInterrupt,
+  } = useVoiceAssistant({
+    autoSpeak: autoVoiceReply,
+    onSuccess: (result) => {
+      const userMsg: ChatHistoryMessage = {
+        role: 'user',
+        content: result.transcript,
+        timestamp: new Date().toISOString(),
+      };
+      const assistantMsg: ChatHistoryMessage = {
+        role: 'assistant',
+        content: result.reply,
+        timestamp: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, userMsg, assistantMsg]);
+      if (result.suggestions && result.suggestions.length > 0) {
+        setSuggestions(result.suggestions);
+      }
+    },
+    onError: (err) => {
+      setError(err);
+    },
+  });
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -76,6 +116,9 @@ export const Chat: React.FC = () => {
     const text = textToSend || inputText;
     if (!text.trim() || loading || !user) return;
 
+    // Interrupt any ongoing voice playback
+    handleInterrupt();
+
     const userMsg: ChatHistoryMessage = {
       role: 'user',
       content: text.trim(),
@@ -99,6 +142,10 @@ export const Chat: React.FC = () => {
       setMessages((prev) => [...prev, assistantMsg]);
       if (response.suggestions && response.suggestions.length > 0) {
         setSuggestions(response.suggestions);
+      }
+
+      if (autoVoiceReply) {
+        speakText(response.reply);
       }
     } catch (err: any) {
       setError(err.message || 'Failed to communicate with AI agent.');
@@ -130,20 +177,15 @@ export const Chat: React.FC = () => {
         <div className="w-16 h-16 bg-brand-50 text-brand-600 rounded-3xl flex items-center justify-center mx-auto">
           <Bot className="w-8 h-8" />
         </div>
-        <div className="space-y-2">
-          <h1 className="text-3xl font-extrabold text-slate-900">Sign In to Chat with ElderCare AI</h1>
-          <p className="text-slate-600 max-w-md mx-auto">
-            Your conversational companion requires an account to personalize conversations and coordinate with your registered caregivers.
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900">Please Sign In</h2>
+          <p className="text-slate-600 mt-2">
+            You must be logged in to chat with your personal AI companion.
           </p>
         </div>
-        <div className="flex items-center justify-center gap-4">
-          <Link to="/login" className="elder-btn-primary">
-            Sign In
-          </Link>
-          <Link to="/signup" className="elder-btn-secondary">
-            Create New Account
-          </Link>
-        </div>
+        <Link to="/login" className="elder-btn-primary inline-flex">
+          Sign In
+        </Link>
       </div>
     );
   }
@@ -155,25 +197,50 @@ export const Chat: React.FC = () => {
         <div>
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 text-xs font-semibold border border-emerald-200 mb-2">
             <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-            Phase 2: AI Orchestrator & Companion Active
+            Phase 7: Hands-Free Voice Pipeline Active
           </div>
           <h1 className="text-3xl font-extrabold text-slate-900 flex items-center gap-2">
             <Heart className="w-7 h-7 text-rose-500 fill-rose-500" />
-            Conversational AI Companion
+            Conversational AI Companion & Voice
           </h1>
           <p className="text-slate-600 text-sm mt-1">
-            Empathetic daily conversation, storytelling, and intelligent care coordination.
+            Empathetic daily conversation, storytelling, voice coordination, and hands-free microphone input.
           </p>
         </div>
 
-        <button
-          onClick={handleClearHistory}
-          className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border border-slate-200 text-slate-600 hover:text-rose-600 hover:bg-rose-50 text-xs font-semibold transition-colors self-start sm:self-auto"
-          title="Clear Conversation History"
-        >
-          <Trash2 className="w-4 h-4" />
-          <span>Clear History</span>
-        </button>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          {/* Voice Readout Toggle */}
+          <button
+            onClick={() => setAutoVoiceReply(!autoVoiceReply)}
+            className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-bold transition-colors ${
+              autoVoiceReply
+                ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                : 'bg-slate-100 border-slate-200 text-slate-500'
+            }`}
+            title="Toggle Voice Readout"
+          >
+            {autoVoiceReply ? (
+              <>
+                <Volume2 className="w-4 h-4 text-emerald-600" />
+                <span>Voice: On</span>
+              </>
+            ) : (
+              <>
+                <VolumeX className="w-4 h-4 text-slate-400" />
+                <span>Voice: Muted</span>
+              </>
+            )}
+          </button>
+
+          <button
+            onClick={handleClearHistory}
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border border-slate-200 text-slate-600 hover:text-rose-600 hover:bg-rose-50 text-xs font-semibold transition-colors"
+            title="Clear Conversation History"
+          >
+            <Trash2 className="w-4 h-4" />
+            <span className="hidden sm:inline">Clear</span>
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -265,6 +332,30 @@ export const Chat: React.FC = () => {
           ))}
         </div>
 
+        {/* Live Voice Status Bar (Visible when voice assistant is active) */}
+        {voiceState !== 'idle' && (
+          <div className="px-6 py-2.5 bg-gradient-to-r from-brand-50 via-sky-50 to-brand-50 border-t border-brand-100 flex items-center justify-between text-xs font-semibold">
+            <div className="flex items-center gap-3">
+              <VoiceWaveform state={voiceState} />
+              <span className="text-brand-900">
+                {voiceState === 'listening' && (voiceTranscript ? `"${voiceTranscript}"` : 'Listening... Speak your request')}
+                {voiceState === 'processing' && 'Processing voice through ElderCare AI...'}
+                {voiceState === 'speaking' && 'ElderCare Companion is speaking...'}
+              </span>
+            </div>
+            {isSpeaking && (
+              <button
+                type="button"
+                onClick={handleInterrupt}
+                className="px-2.5 py-1 rounded-lg bg-rose-100 hover:bg-rose-200 text-rose-800 flex items-center gap-1 text-[11px] transition-colors"
+              >
+                <Square className="w-3 h-3 fill-rose-700" />
+                <span>Stop Voice</span>
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Input Bar */}
         <div className="p-4 sm:p-5 bg-white border-t border-slate-200">
           <form
@@ -272,20 +363,57 @@ export const Chat: React.FC = () => {
               e.preventDefault();
               handleSend();
             }}
-            className="flex items-center gap-3"
+            className="flex items-center gap-2 sm:gap-3"
           >
+            {/* Voice Input Button */}
+            <button
+              type="button"
+              onClick={() => {
+                if (isSpeaking) {
+                  handleInterrupt();
+                } else if (isListening) {
+                  stopListening();
+                } else {
+                  startListening();
+                }
+              }}
+              className={`p-3.5 rounded-xl border flex items-center justify-center transition-all flex-shrink-0 ${
+                isListening
+                  ? 'bg-rose-600 text-white border-rose-600 shadow-md animate-pulse'
+                  : isSpeaking
+                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-md'
+                  : 'bg-brand-50 hover:bg-brand-100 text-brand-700 border-brand-200 shadow-xs'
+              }`}
+              title={
+                isSpeaking
+                  ? 'Stop speech playback'
+                  : isListening
+                  ? 'Stop listening'
+                  : 'Tap to speak hands-free'
+              }
+            >
+              {isSpeaking ? (
+                <Square className="w-5 h-5 fill-white" />
+              ) : isListening ? (
+                <MicOff className="w-5 h-5" />
+              ) : (
+                <Mic className="w-5 h-5" />
+              )}
+            </button>
+
             <input
               type="text"
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
-              placeholder="Type your message or ask for a story..."
+              placeholder="Type a message or tap the mic to speak hands-free..."
               className="flex-1 px-4 py-3.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:outline-none text-base"
-              disabled={loading}
+              disabled={loading || isListening}
             />
+
             <button
               type="submit"
-              disabled={loading || !inputText.trim()}
-              className="elder-btn-primary px-5 py-3.5 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={loading || !inputText.trim() || isListening}
+              className="elder-btn-primary px-5 py-3.5 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
             >
               {loading ? (
                 <Loader2 className="w-5 h-5 animate-spin" />

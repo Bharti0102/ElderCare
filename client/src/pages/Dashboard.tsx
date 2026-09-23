@@ -16,6 +16,7 @@ import {
   Mic,
   MessageCircleHeart,
   Users,
+  Sparkles,
 } from 'lucide-react';
 import { HealthData } from '../types';
 
@@ -104,11 +105,22 @@ export const Dashboard: React.FC = () => {
     {
       phase: 'Phase 7',
       title: 'Voice Pipeline',
-      status: 'Next In Queue',
-      statusColor: 'bg-sky-100 text-sky-800 border-sky-300',
+      status: 'Ready & Verified',
+      statusColor: 'bg-emerald-100 text-emerald-800 border-emerald-300',
       description: 'Microphone UI, Web Speech / STT & TTS voice loops, hands-free conversational assistant.',
       icon: Mic,
+      active: true,
       link: '/chat',
+    },
+    {
+      phase: 'Phase 8',
+      title: 'Integration & Polish',
+      status: 'Next In Queue',
+      statusColor: 'bg-sky-100 text-sky-800 border-sky-300',
+      description: 'Senior-first accessibility audit, system-wide smoke test, offline handling, and production hardening.',
+      icon: Sparkles,
+      active: false,
+      link: '/',
     },
   ];
 
