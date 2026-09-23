@@ -25,6 +25,7 @@ export class AgentController {
           intent: result.intent,
           confidence: result.confidence,
           suggestions: result.suggestions,
+          toolResults: result.toolResults,
         },
         'Response generated successfully'
       );

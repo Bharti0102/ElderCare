@@ -1,65 +1,627 @@
-import React from 'react';
-import { Clock, Plus, Sparkles, CheckCircle2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import {
+  Bell,
+  Clock,
+  Plus,
+  Pill,
+  Calendar,
+  Droplets,
+  Sparkles,
+  CheckCircle2,
+  Trash2,
+  AlertCircle,
+  RotateCw,
+  X,
+  MessageSquare,
+  Check,
+} from 'lucide-react';
+import { Link } from 'react-router-dom';
+import {
+  getReminders,
+  getDueReminders,
+  createReminder,
+  deleteReminder,
+  completeReminder,
+  snoozeReminder,
+} from '../services/reminder.service';
+import { Reminder, ReminderCategory, ReminderRepeat, CreateReminderDTO } from '../types';
 
 export const Reminders: React.FC = () => {
+  const [reminders, setReminders] = useState<Reminder[]>([]);
+  const [dueReminders, setDueReminders] = useState<Reminder[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'ALL' | 'PENDING' | 'COMPLETED' | 'SNOOZED'>('ALL');
+
+  // Modal State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [modalError, setModalError] = useState<string | null>(null);
+
+  // Form State
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [category, setCategory] = useState<ReminderCategory>('MEDICATION');
+  const [scheduledDate, setScheduledDate] = useState(() => {
+    const d = new Date();
+    d.setMinutes(d.getMinutes() + 30);
+    return d.toISOString().slice(0, 16); // format: YYYY-MM-DDTHH:mm
+  });
+  const [repeat, setRepeat] = useState<ReminderRepeat>('none');
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const [allList, dueList] = await Promise.all([
+        getReminders(activeTab === 'ALL' ? undefined : activeTab),
+        getDueReminders(),
+      ]);
+      setReminders(allList);
+      setDueReminders(dueList);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load reminders');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+    // Auto-poll due reminders every 30 seconds
+    const interval = setInterval(async () => {
+      try {
+        const dueList = await getDueReminders();
+        setDueReminders(dueList);
+      } catch {
+        // silent fail on poll
+      }
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [activeTab]);
+
+  const handleOpenModal = () => {
+    setTitle('');
+    setDescription('');
+    setCategory('MEDICATION');
+    const d = new Date();
+    d.setMinutes(d.getMinutes() + 30);
+    setScheduledDate(d.toISOString().slice(0, 16));
+    setRepeat('none');
+    setModalError(null);
+    setIsModalOpen(true);
+  };
+
+  const handleCreateReminder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title.trim()) {
+      setModalError('Please enter a title for the reminder');
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      setModalError(null);
+      const dto: CreateReminderDTO = {
+        title: title.trim(),
+        description: description.trim() || undefined,
+        category,
+        scheduledAt: new Date(scheduledDate).toISOString(),
+        repeat,
+      };
+
+      await createReminder(dto);
+      setIsModalOpen(false);
+      await fetchData();
+    } catch (err: any) {
+      setModalError(err.message || 'Failed to create reminder');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleComplete = async (id: string) => {
+    try {
+      await completeReminder(id);
+      await fetchData();
+    } catch (err: any) {
+      setError(err.message || 'Failed to complete reminder');
+    }
+  };
+
+  const handleSnooze = async (id: string, minutes = 10) => {
+    try {
+      await snoozeReminder(id, minutes);
+      await fetchData();
+    } catch (err: any) {
+      setError(err.message || 'Failed to snooze reminder');
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm('Are you sure you want to remove this reminder?')) return;
+    try {
+      await deleteReminder(id);
+      await fetchData();
+    } catch (err: any) {
+      setError(err.message || 'Failed to delete reminder');
+    }
+  };
+
+  const getCategoryIcon = (cat: ReminderCategory) => {
+    switch (cat) {
+      case 'MEDICATION':
+        return <Pill className="w-5 h-5 text-rose-600" />;
+      case 'HYDRATION':
+        return <Droplets className="w-5 h-5 text-sky-600" />;
+      case 'APPOINTMENT':
+        return <Calendar className="w-5 h-5 text-amber-600" />;
+      case 'GENERAL':
+      default:
+        return <Bell className="w-5 h-5 text-brand-600" />;
+    }
+  };
+
+  const getCategoryBadge = (cat: ReminderCategory) => {
+    switch (cat) {
+      case 'MEDICATION':
+        return 'bg-rose-50 text-rose-700 border-rose-200';
+      case 'HYDRATION':
+        return 'bg-sky-50 text-sky-700 border-sky-200';
+      case 'APPOINTMENT':
+        return 'bg-amber-50 text-amber-700 border-amber-200';
+      case 'GENERAL':
+      default:
+        return 'bg-brand-50 text-brand-700 border-brand-200';
+    }
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'COMPLETED':
+        return 'bg-emerald-100 text-emerald-800 border-emerald-300';
+      case 'SNOOZED':
+        return 'bg-amber-100 text-amber-800 border-amber-300';
+      case 'CANCELLED':
+        return 'bg-slate-100 text-slate-600 border-slate-300';
+      case 'PENDING':
+      default:
+        return 'bg-sky-100 text-sky-800 border-sky-300';
+    }
+  };
+
+  const formatScheduledTime = (dateStr: string) => {
+    try {
+      const d = new Date(dateStr);
+      return d.toLocaleDateString([], {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch {
+      return dateStr;
+    }
+  };
+
   return (
     <div className="space-y-8">
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-800 text-xs font-semibold border border-amber-200 mb-2">
-            <Sparkles className="w-3.5 h-3.5" />
-            Phase 3: Reminder Agent
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 text-xs font-semibold border border-emerald-200 mb-2">
+            <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+            Phase 3: Active & Operational
           </div>
           <h1 className="text-3xl font-extrabold text-slate-900">Medication & Daily Reminders</h1>
           <p className="text-slate-600 mt-1">
-            Natural language reminders schedule seamlessly with recurring intervals.
+            Manage your health routine with timed medication alerts, hydration checks, and recurring reminders.
           </p>
         </div>
 
+        <div className="flex items-center gap-3">
+          <Link
+            to="/chat"
+            className="elder-btn-secondary text-sm flex items-center gap-1.5"
+            title="Create reminder via AI Voice & Chat"
+          >
+            <MessageSquare className="w-4 h-4 text-brand-600" />
+            <span>Schedule via AI</span>
+          </Link>
+          <button
+            onClick={handleOpenModal}
+            className="elder-btn-primary flex items-center gap-1.5 shadow-md shadow-brand-500/20"
+          >
+            <Plus className="w-5 h-5" />
+            <span>New Reminder</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Due Reminders High Priority Alert Banner */}
+      {dueReminders.length > 0 && (
+        <div className="elder-card p-6 bg-gradient-to-r from-amber-500/10 via-rose-500/10 to-brand-500/10 border-2 border-amber-400 shadow-lg">
+          <div className="flex items-start gap-4">
+            <div className="p-3 bg-amber-500 text-white rounded-2xl shadow-sm animate-bounce">
+              <AlertCircle className="w-7 h-7" />
+            </div>
+            <div className="flex-1 space-y-3">
+              <div>
+                <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                  <span>Action Needed:</span>
+                  <span className="text-amber-800">
+                    {dueReminders.length} Reminder{dueReminders.length > 1 ? 's' : ''} Due Now!
+                  </span>
+                </h2>
+                <p className="text-sm text-slate-700">
+                  Please take your prescribed medicines or confirm your completed tasks below.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                {dueReminders.map((due) => (
+                  <div
+                    key={due._id}
+                    className="p-4 bg-white rounded-2xl border border-amber-200 shadow-sm flex items-center justify-between gap-4"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="p-2 bg-slate-50 rounded-xl">
+                        {getCategoryIcon(due.category)}
+                      </div>
+                      <div className="truncate">
+                        <h4 className="font-bold text-slate-900 truncate">{due.title}</h4>
+                        <p className="text-xs text-slate-500">
+                          Due: {formatScheduledTime(due.scheduledAt)}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <button
+                        onClick={() => handleComplete(due._id)}
+                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl flex items-center gap-1 shadow-sm transition-transform active:scale-95"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Done</span>
+                      </button>
+                      <button
+                        onClick={() => handleSnooze(due._id, 10)}
+                        className="px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-800 text-xs font-bold rounded-xl flex items-center gap-1 transition-transform active:scale-95"
+                        title="Snooze 10 minutes"
+                      >
+                        <Clock className="w-3.5 h-3.5" />
+                        <span>10m</span>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AI natural language tip */}
+      <div className="p-4 bg-sky-50 rounded-2xl border border-sky-200 flex items-start gap-3">
+        <Sparkles className="w-5 h-5 text-sky-600 mt-0.5 flex-shrink-0" />
+        <div className="text-sm text-sky-900">
+          <span className="font-bold">Pro-tip for seniors: </span>
+          You can simply say or type to the AI Companion:
+          <span className="italic font-medium text-sky-950 ml-1">
+            "Remind me to take my blood pressure medicine at 8 PM every day"
+          </span>
+          — and it will automatically schedule it for you!
+        </div>
+      </div>
+
+      {/* Filter Tabs */}
+      <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+        <div className="flex items-center gap-2">
+          {(['ALL', 'PENDING', 'COMPLETED', 'SNOOZED'] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${
+                activeTab === tab
+                  ? 'bg-brand-600 text-white shadow-sm'
+                  : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+              }`}
+            >
+              {tab.charAt(0) + tab.slice(1).toLowerCase()}
+            </button>
+          ))}
+        </div>
+
         <button
-          className="elder-btn-primary opacity-60 cursor-not-allowed"
-          disabled
+          onClick={fetchData}
+          className="p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors"
+          title="Refresh reminders"
         >
-          <Plus className="w-5 h-5 mr-1" />
-          <span>New Reminder</span>
+          <RotateCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="elder-card p-6 border-l-4 border-l-brand-600">
-          <div className="flex items-start justify-between">
-            <div className="space-y-1">
-              <span className="text-xs font-bold uppercase tracking-wider text-brand-600">Preview</span>
-              <h3 className="text-xl font-bold text-slate-900">Blood Pressure Medicine</h3>
-              <p className="text-slate-600 text-sm">Take 1 tablet of Amlodipine 5mg after dinner.</p>
-            </div>
-            <span className="p-2.5 bg-brand-50 text-brand-600 rounded-xl">
-              <Clock className="w-5 h-5" />
-            </span>
-          </div>
-          <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between text-sm text-slate-500">
-            <span>Scheduled: 8:00 PM (Daily)</span>
-            <span className="text-amber-600 font-medium">Pending Phase 3</span>
-          </div>
+      {/* Reminders List */}
+      {error && (
+        <div className="p-4 bg-rose-50 text-rose-700 border border-rose-200 rounded-2xl flex items-center gap-2">
+          <AlertCircle className="w-5 h-5 flex-shrink-0" />
+          <span>{error}</span>
         </div>
+      )}
 
-        <div className="elder-card p-6 border-l-4 border-l-emerald-600">
-          <div className="flex items-start justify-between">
-            <div className="space-y-1">
-              <span className="text-xs font-bold uppercase tracking-wider text-emerald-600">Preview</span>
-              <h3 className="text-xl font-bold text-slate-900">Hydration Check</h3>
-              <p className="text-slate-600 text-sm">Drink a full glass of warm water.</p>
-            </div>
-            <span className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl">
-              <CheckCircle2 className="w-5 h-5" />
-            </span>
+      {loading && reminders.length === 0 ? (
+        <div className="text-center py-16">
+          <RotateCw className="w-8 h-8 text-brand-500 animate-spin mx-auto mb-3" />
+          <p className="text-slate-500 font-medium">Loading your reminders...</p>
+        </div>
+      ) : reminders.length === 0 ? (
+        <div className="elder-card p-12 text-center space-y-4">
+          <div className="w-16 h-16 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center mx-auto">
+            <Bell className="w-8 h-8" />
           </div>
-          <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between text-sm text-slate-500">
-            <span>Scheduled: Every 2 Hours</span>
-            <span className="text-amber-600 font-medium">Pending Phase 3</span>
+          <div className="space-y-1">
+            <h3 className="text-xl font-bold text-slate-900">No Reminders Found</h3>
+            <p className="text-slate-600 max-w-md mx-auto text-sm">
+              {activeTab === 'ALL'
+                ? "You haven't scheduled any reminders yet. Click below or talk to the AI to create your first medication or task alert."
+                : `No reminders matching status "${activeTab}".`}
+            </p>
+          </div>
+          {activeTab === 'ALL' && (
+            <button onClick={handleOpenModal} className="elder-btn-primary mx-auto inline-flex items-center gap-2">
+              <Plus className="w-5 h-5" />
+              <span>Add Your First Reminder</span>
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {reminders.map((reminder) => {
+            const isCompleted = reminder.status === 'COMPLETED';
+            const isSnoozed = reminder.status === 'SNOOZED';
+
+            return (
+              <div
+                key={reminder._id}
+                className={`elder-card p-6 flex flex-col justify-between border-l-4 transition-all hover:shadow-md ${
+                  reminder.category === 'MEDICATION'
+                    ? 'border-l-rose-500'
+                    : reminder.category === 'HYDRATION'
+                    ? 'border-l-sky-500'
+                    : reminder.category === 'APPOINTMENT'
+                    ? 'border-l-amber-500'
+                    : 'border-l-brand-500'
+                } ${isCompleted ? 'opacity-70 bg-slate-50/70' : 'bg-white'}`}
+              >
+                <div className="space-y-3">
+                  {/* Category and Status Badge */}
+                  <div className="flex items-center justify-between">
+                    <span
+                      className={`text-xs px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider border ${getCategoryBadge(
+                        reminder.category
+                      )}`}
+                    >
+                      {reminder.category}
+                    </span>
+                    <span
+                      className={`text-xs px-2.5 py-0.5 rounded-full font-bold border ${getStatusBadge(
+                        reminder.status
+                      )}`}
+                    >
+                      {reminder.status}
+                    </span>
+                  </div>
+
+                  {/* Title and Icon */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3
+                        className={`text-xl font-bold text-slate-900 ${
+                          isCompleted ? 'line-through text-slate-500' : ''
+                        }`}
+                      >
+                        {reminder.title}
+                      </h3>
+                      {reminder.description && (
+                        <p className="text-slate-600 text-sm mt-1">{reminder.description}</p>
+                      )}
+                    </div>
+                    <div className="p-2.5 bg-slate-50 rounded-2xl flex-shrink-0">
+                      {getCategoryIcon(reminder.category)}
+                    </div>
+                  </div>
+
+                  {/* Scheduling and Recurrence Info */}
+                  <div className="space-y-1.5 pt-2 text-xs text-slate-600">
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-slate-400" />
+                      <span>
+                        <strong className="text-slate-800">Time:</strong> {formatScheduledTime(reminder.scheduledAt)}
+                      </span>
+                    </div>
+
+                    {reminder.repeat !== 'none' && (
+                      <div className="flex items-center gap-2">
+                        <RotateCw className="w-4 h-4 text-brand-500" />
+                        <span className="text-brand-700 font-semibold capitalize">
+                          Repeats: {reminder.repeat}
+                        </span>
+                      </div>
+                    )}
+
+                    {isSnoozed && reminder.snoozedUntil && (
+                      <div className="text-amber-700 font-semibold bg-amber-50 px-2 py-1 rounded-lg border border-amber-200">
+                        Snoozed until: {formatScheduledTime(reminder.snoozedUntil)}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Actions Footer */}
+                <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    {!isCompleted ? (
+                      <>
+                        <button
+                          onClick={() => handleComplete(reminder._id)}
+                          className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-xs transition-colors"
+                        >
+                          <CheckCircle2 className="w-4 h-4" />
+                          <span>Done</span>
+                        </button>
+                        <button
+                          onClick={() => handleSnooze(reminder._id, 10)}
+                          className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 text-xs font-bold rounded-xl border border-amber-200 transition-colors"
+                          title="Snooze 10 minutes"
+                        >
+                          <span>Snooze</span>
+                        </button>
+                      </>
+                    ) : (
+                      <span className="text-xs font-bold text-emerald-700 flex items-center gap-1">
+                        <CheckCircle2 className="w-4 h-4" />
+                        Completed
+                      </span>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={() => handleDelete(reminder._id)}
+                    className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors"
+                    title="Delete Reminder"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* New Reminder Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="elder-card p-6 sm:p-8 max-w-lg w-full bg-white shadow-2xl relative animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-brand-50 text-brand-600 rounded-xl">
+                  <Plus className="w-5 h-5" />
+                </div>
+                <h3 className="text-xl font-bold text-slate-900">Add New Reminder</h3>
+              </div>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {modalError && (
+              <div className="mt-4 p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-sm flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                <span>{modalError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleCreateReminder} className="space-y-5 mt-5">
+              <div>
+                <label className="block text-sm font-bold text-slate-800 mb-1">
+                  Reminder Title <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="e.g., Blood Pressure Medication (Amlodipine)"
+                  className="elder-input text-base"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-slate-800 mb-1">
+                  Instructions / Notes (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="e.g., Take 1 tablet with full glass of water after breakfast"
+                  className="elder-input text-base"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-bold text-slate-800 mb-1">
+                    Category
+                  </label>
+                  <select
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value as ReminderCategory)}
+                    className="elder-input text-base"
+                  >
+                    <option value="MEDICATION">💊 Medication</option>
+                    <option value="HYDRATION">💧 Hydration</option>
+                    <option value="APPOINTMENT">📅 Appointment</option>
+                    <option value="GENERAL">🔔 General</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-800 mb-1">
+                    Repeat Schedule
+                  </label>
+                  <select
+                    value={repeat}
+                    onChange={(e) => setRepeat(e.target.value as ReminderRepeat)}
+                    className="elder-input text-base"
+                  >
+                    <option value="none">One-time</option>
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly</option>
+                    <option value="monthly">Monthly</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-slate-800 mb-1">
+                  Date & Time <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="datetime-local"
+                  value={scheduledDate}
+                  onChange={(e) => setScheduledDate(e.target.value)}
+                  className="elder-input text-base"
+                  required
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="elder-btn-secondary"
+                  disabled={submitting}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="elder-btn-primary shadow-md shadow-brand-500/20"
+                  disabled={submitting}
+                >
+                  {submitting ? 'Creating...' : 'Save Reminder'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

@@ -1,10 +1,14 @@
 import { createApp } from './app';
 import { env } from './config/env';
 import { connectDatabase, disconnectDatabase } from './config/database';
+import { ReminderScheduler } from './services/reminder/reminder.scheduler';
 
 const startServer = async (): Promise<void> => {
   // Connect to MongoDB
   await connectDatabase();
+
+  // Start background reminder scheduler
+  ReminderScheduler.start(30000);
 
   const app = createApp();
 
@@ -18,6 +22,7 @@ const startServer = async (): Promise<void> => {
 
   const handleShutdown = async (signal: string) => {
     console.log(`\nReceived ${signal}. Gracefully shutting down...`);
+    ReminderScheduler.stop();
     server.close(async () => {
       console.log('HTTP server closed.');
       await disconnectDatabase();

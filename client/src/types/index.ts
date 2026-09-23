@@ -56,3 +56,39 @@ export interface UpdateContactDTO {
   phone?: string;
   isPrimary?: boolean;
 }
+
+export type ReminderCategory = 'MEDICATION' | 'APPOINTMENT' | 'HYDRATION' | 'GENERAL';
+export type ReminderRepeat = 'none' | 'daily' | 'weekly' | 'monthly';
+export type ReminderStatus = 'PENDING' | 'COMPLETED' | 'SNOOZED' | 'CANCELLED';
+
+export interface Reminder {
+  _id: string;
+  userId: string;
+  title: string;
+  description?: string;
+  category: ReminderCategory;
+  scheduledAt: string;
+  repeat: ReminderRepeat;
+  status: ReminderStatus;
+  snoozedUntil?: string;
+  lastNotifiedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateReminderDTO {
+  title: string;
+  description?: string;
+  category?: ReminderCategory;
+  scheduledAt: string | Date;
+  repeat?: ReminderRepeat;
+}
+
+export interface UpdateReminderDTO {
+  title?: string;
+  description?: string;
+  category?: ReminderCategory;
+  scheduledAt?: string | Date;
+  repeat?: ReminderRepeat;
+  status?: ReminderStatus;
+}

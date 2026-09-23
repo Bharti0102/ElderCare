@@ -4,6 +4,7 @@ import authRoutes from './auth.routes';
 import contactRoutes from './contact.routes';
 import agentRoutes from './agent.routes';
 import chatRoutes from './chat.routes';
+import reminderRoutes from './reminder.routes';
 
 const router = Router();
 
@@ -13,5 +14,6 @@ router.use('/auth', authRoutes);
 router.use('/contacts', contactRoutes);
 router.use('/agent', agentRoutes);
 router.use('/chat', chatRoutes);
+router.use('/reminders', reminderRoutes);
 
 export default router;

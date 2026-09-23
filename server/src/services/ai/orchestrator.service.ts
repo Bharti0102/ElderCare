@@ -1,5 +1,6 @@
 import { LLMService } from './llm.service';
 import { ChatTool } from './tools/chat.tool';
+import { ReminderTool } from './tools/reminder.tool';
 import { ChatService } from '../chat/chat.service';
 import { KnownIntent } from '../../integrations/llm/llm.interface';
 
@@ -8,10 +9,12 @@ export interface OrchestratorResult {
   intent: KnownIntent;
   confidence: number;
   suggestions: string[];
+  toolResults?: any[];
 }
 
 export class OrchestratorService {
   private static chatTool = new ChatTool();
+  private static reminderTool = new ReminderTool();
 
   public static async processMessage(
     userId: string,
@@ -36,15 +39,21 @@ export class OrchestratorService {
       }
 
       case 'CREATE_REMINDER': {
-        const previewReply =
-          '⏰ I understand you would like to set a reminder. The automated Medication & Daily Reminders Agent will be enabled in Phase 3. For now, you can explore the Reminders preview tab!';
+        // Record user intent in dialogue stream
         await ChatService.addMessage(userId, 'user', trimmedInput, 'CREATE_REMINDER');
-        await ChatService.addMessage(userId, 'assistant', previewReply, 'CREATE_REMINDER');
+
+        // Execute reminder creation via validated ReminderTool
+        const toolResult = await this.reminderTool.execute(userId, { message: trimmedInput });
+
+        // Record assistant response
+        await ChatService.addMessage(userId, 'assistant', toolResult.message, 'CREATE_REMINDER');
+
         return {
-          reply: previewReply,
+          reply: toolResult.message,
           intent: 'CREATE_REMINDER',
           confidence: intentResult.confidence,
-          suggestions: ['Go to Reminders tab', 'Tell me a story', 'How are you today?'],
+          toolResults: [toolResult],
+          suggestions: toolResult.suggestions || ['View my reminders', 'Remind me to drink water', 'Tell me a story'],
         };
       }
 
