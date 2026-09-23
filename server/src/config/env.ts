@@ -18,6 +18,9 @@ const envSchema = z.object({
   FAST2SMS_API_KEY: z.string().optional().default(''),
   CLOUDFLARE_TUNNEL_URL: z.string().optional().default(''),
   AUTO_START_TUNNEL: z.enum(['true', 'false']).default('false'),
+  TWILIO_ACCOUNT_SID: z.string().optional().default(''),
+  TWILIO_AUTH_TOKEN: z.string().optional().default(''),
+  TWILIO_PHONE_NUMBER: z.string().optional().default(''),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);

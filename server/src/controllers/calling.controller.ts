@@ -122,4 +122,18 @@ export class CallingController {
       next(error);
     }
   }
+
+  public static async publicHangupCall(
+    req: any,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const id = String(req.params.id);
+      const call = await CallingService.publicHangupCall(id);
+      sendSuccess(res, { call }, 'Call ended successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
 }

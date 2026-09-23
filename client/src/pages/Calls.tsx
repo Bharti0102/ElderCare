@@ -302,7 +302,10 @@ export const Calls: React.FC = () => {
             ringHandleRef.current.stop();
             ringHandleRef.current = null;
           }
+          playHangupTone();
+          WebRTCService.endCall();
           setActiveCall(null);
+          setSuccessMsg(`Call ended by ${contact.name}.`);
           fetchData();
         },
       });
@@ -368,7 +371,14 @@ export const Calls: React.FC = () => {
         callId: res.call._id,
         userId: 'patient',
         onCallEnded: () => {
+          if (ringHandleRef.current) {
+            ringHandleRef.current.stop();
+            ringHandleRef.current = null;
+          }
+          playHangupTone();
+          WebRTCService.endCall();
           setActiveCall(null);
+          setSuccessMsg('Call ended by hospital reception.');
           fetchData();
         },
       });

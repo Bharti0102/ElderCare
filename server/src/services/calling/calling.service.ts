@@ -256,4 +256,32 @@ export class CallingService {
       startedAt: call.startedAt,
     };
   }
+
+  /**
+   * Public hangup invoked by guest caregiver when ending call from mobile.
+   */
+  public static async publicHangupCall(callId: string): Promise<ICall> {
+    const call = await Call.findById(callId);
+    if (!call) {
+      throw new AppError('Call record not found', 404, 'NOT_FOUND');
+    }
+
+    if (call.status === 'COMPLETED' || call.status === 'CANCELLED') {
+      return call;
+    }
+
+    const telephony = TelephonyFactory.getProvider();
+    await telephony.terminateCall(call.providerCallId);
+
+    call.status = 'COMPLETED';
+    call.endedAt = new Date();
+    call.durationSeconds = Math.max(
+      0,
+      Math.round((call.endedAt.getTime() - call.startedAt.getTime()) / 1000)
+    );
+
+    await call.save();
+    console.log(`[CallingService] Call ${callId} marked COMPLETED via recipient hangup.`);
+    return call;
+  }
 }

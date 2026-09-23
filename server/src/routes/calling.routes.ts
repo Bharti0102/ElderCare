@@ -6,6 +6,7 @@ const router = Router();
 
 // Public call room endpoint for guest caregiver join screen
 router.get('/public/:id', CallingController.getPublicCallInfo);
+router.post('/public/:id/hangup', CallingController.publicHangupCall);
 
 // All subsequent calling endpoints require authentication
 router.use(authenticate);

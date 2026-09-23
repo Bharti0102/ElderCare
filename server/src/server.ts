@@ -5,6 +5,7 @@ import { env } from './config/env';
 import { connectDatabase, disconnectDatabase } from './config/database';
 import { ReminderScheduler } from './services/reminder/reminder.scheduler';
 import { CloudflareTunnelService } from './services/tunnel/cloudflare.tunnel';
+import { CallingService } from './services/calling/calling.service';
 
 const startServer = async (): Promise<void> => {
   // Connect to MongoDB
@@ -51,9 +52,27 @@ const startServer = async (): Promise<void> => {
       socket.to(callId).emit('webrtc-ice-candidate', { candidate, socketId: socket.id });
     });
 
-    socket.on('webrtc-hangup', ({ callId }) => {
-      socket.to(callId).emit('webrtc-hangup', { socketId: socket.id });
+    socket.on('webrtc-hangup', async ({ callId }) => {
+      console.log(`[WebRTC Signaling] webrtc-hangup event for room: ${callId} from socket ${socket.id}`);
+      socket.to(callId).emit('webrtc-hangup', { socketId: socket.id, callId });
       socket.leave(callId);
+      if (callId) {
+        try {
+          await CallingService.publicHangupCall(callId);
+        } catch {
+          // ignore
+        }
+      }
+    });
+
+    socket.on('disconnecting', () => {
+      for (const room of socket.rooms) {
+        if (room !== socket.id) {
+          console.log(`[WebRTC Signaling] Socket ${socket.id} disconnected, notifying room: ${room}`);
+          socket.to(room).emit('webrtc-hangup', { socketId: socket.id, callId: room });
+          CallingService.publicHangupCall(room).catch(() => {});
+        }
+      }
     });
   });
 

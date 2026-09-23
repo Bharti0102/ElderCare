@@ -113,10 +113,21 @@ export const CallJoin: React.FC = () => {
     setIsMuted(muted);
   };
 
-  const handleHangup = () => {
+  const handleHangup = async () => {
     WebRTCService.endCall();
     setIsCallEnded(true);
     setHasJoined(false);
+
+    if (callId) {
+      try {
+        const serverUrl = window.location.hostname === 'localhost' ? 'http://localhost:5000' : '';
+        await fetch(`${serverUrl}/api/calls/public/${callId}/hangup`, {
+          method: 'POST',
+        });
+      } catch (err) {
+        console.warn('Notice recording public call hangup:', err);
+      }
+    }
   };
 
   const formatDuration = (secs: number) => {

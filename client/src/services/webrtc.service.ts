@@ -99,6 +99,17 @@ export class WebRTCService {
       this.playRemoteStream(remoteStream);
     };
 
+    // Monitor connection state (e.g. when receiver closes browser or loses connection)
+    this.peerConnection.onconnectionstatechange = () => {
+      const state = this.peerConnection?.connectionState;
+      console.log(`[WebRTCService] Connection state changed: ${state}`);
+      if (state === 'disconnected' || state === 'failed' || state === 'closed') {
+        console.log('[WebRTCService] Remote peer disconnected. Ending call session.');
+        this.endCall();
+        if (options.onCallEnded) options.onCallEnded();
+      }
+    };
+
     // 5. Setup signaling via Socket.IO
     const socket = this.getSocket();
 
@@ -244,6 +255,17 @@ export class WebRTCService {
         options.onRemoteStream(remoteStream);
       }
       this.playRemoteStream(remoteStream);
+    };
+
+    // Monitor connection state on guest peer
+    this.peerConnection.onconnectionstatechange = () => {
+      const state = this.peerConnection?.connectionState;
+      console.log(`[WebRTCService-Guest] Connection state changed: ${state}`);
+      if (state === 'disconnected' || state === 'failed' || state === 'closed') {
+        console.log('[WebRTCService-Guest] Peer disconnected. Ending call session.');
+        this.endCall();
+        if (options.onCallEnded) options.onCallEnded();
+      }
     };
 
     // 5. Setup signaling via Socket.IO
