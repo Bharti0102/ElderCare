@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Phone,
   PhoneCall,
@@ -37,7 +37,13 @@ import {
   cancelAppointment,
   getHospitalTarget,
 } from '../services/appointment.service';
-import { speakText, playReminderChime } from '../services/voiceNotification.service';
+import {
+  speakText,
+  playReminderChime,
+  startTelephoneRinging,
+  playHangupTone,
+} from '../services/voiceNotification.service';
+import { VoiceWaveform } from '../components/voice/VoiceWaveform';
 import { Call, EmergencyContact, Appointment, HospitalCallResponse } from '../types';
 
 export const Calls: React.FC = () => {
@@ -73,6 +79,18 @@ export const Calls: React.FC = () => {
   const [isAiCalling, setIsAiCalling] = useState(false);
   const [isConfirmingAppointment, setIsConfirmingAppointment] = useState(false);
   const [telephonyStatus, setTelephonyStatus] = useState<TelephonyStatus | null>(null);
+
+  // Audio ringing controller ref
+  const ringHandleRef = useRef<{ stop: () => void } | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (ringHandleRef.current) {
+        ringHandleRef.current.stop();
+        ringHandleRef.current = null;
+      }
+    };
+  }, []);
 
   const fetchData = async () => {
     try {
@@ -146,8 +164,10 @@ export const Calls: React.FC = () => {
     try {
       setIsDialing(true);
       setError(null);
-      playReminderChime();
-      speakText(`Calling your ${contact.relationship}, ${contact.name}. Please stay on the line.`);
+
+      // Start realistic phone ringing tone through browser speakers
+      if (ringHandleRef.current) ringHandleRef.current.stop();
+      ringHandleRef.current = startTelephoneRinging();
 
       const call = await initiateCaregiverCall({
         contactId: contact._id,
@@ -157,8 +177,25 @@ export const Calls: React.FC = () => {
 
       setActiveCall(call);
       setCallDuration(0);
+
+      // After 2 realistic rings (~3.5 seconds), connect and let caregiver speak out loud
+      setTimeout(() => {
+        if (ringHandleRef.current) {
+          ringHandleRef.current.stop();
+          ringHandleRef.current = null;
+        }
+        setActiveCall((prev) => (prev ? { ...prev, status: 'CONNECTED' } : null));
+        speakText(
+          `Hello! This is ${contact.name}, your ${contact.relationship}. I just received your ElderCare check-in alert. I'm right here with you, how are you feeling?`
+        );
+      }, 3500);
+
       await fetchData();
     } catch (err: any) {
+      if (ringHandleRef.current) {
+        ringHandleRef.current.stop();
+        ringHandleRef.current = null;
+      }
       setError(err.message || 'Failed to initiate phone call');
       speakText('Could not complete call. Please check your emergency contacts.');
     } finally {
@@ -169,6 +206,11 @@ export const Calls: React.FC = () => {
   const handleEndCall = async () => {
     if (!activeCall) return;
     try {
+      if (ringHandleRef.current) {
+        ringHandleRef.current.stop();
+        ringHandleRef.current = null;
+      }
+      playHangupTone();
       await hangupCall(activeCall._id);
       speakText('Call disconnected.');
       setActiveCall(null);
@@ -183,8 +225,9 @@ export const Calls: React.FC = () => {
     try {
       setIsDialing(true);
       setError(null);
-      playReminderChime();
-      speakText(`Connecting direct call to ${hospitalName} reception.`);
+
+      if (ringHandleRef.current) ringHandleRef.current.stop();
+      ringHandleRef.current = startTelephoneRinging();
 
       const res = await initiateHumanHospitalCall({
         hospital: hospitalName,
@@ -198,9 +241,26 @@ export const Calls: React.FC = () => {
 
       setActiveCall(res.call);
       setCallDuration(0);
+
+      // After realistic ringing period (~3.5s), hospital receptionist speaks
+      setTimeout(() => {
+        if (ringHandleRef.current) {
+          ringHandleRef.current.stop();
+          ringHandleRef.current = null;
+        }
+        setActiveCall((prev) => (prev ? { ...prev, status: 'CONNECTED' } : null));
+        speakText(
+          `Thank you for calling ${hospitalName}, ${department}. My name is reception coordinator. How may I assist you with your appointment today?`
+        );
+      }, 3500);
+
       setSuccessMsg(`Direct call connected to ${hospitalName} reception.`);
       await fetchData();
     } catch (err: any) {
+      if (ringHandleRef.current) {
+        ringHandleRef.current.stop();
+        ringHandleRef.current = null;
+      }
       setError(err.message || 'Failed to connect to hospital reception');
     } finally {
       setIsDialing(false);
@@ -213,8 +273,10 @@ export const Calls: React.FC = () => {
       setIsAiCalling(true);
       setError(null);
       setAiCallResult(null);
-      playReminderChime();
-      speakText(`ElderCare AI is calling ${hospitalName} reception to check available appointments.`);
+
+      // Ringing sound while AI dials reception
+      if (ringHandleRef.current) ringHandleRef.current.stop();
+      ringHandleRef.current = startTelephoneRinging();
 
       const res = await initiateAIHospitalCall({
         hospital: hospitalName,
@@ -226,11 +288,21 @@ export const Calls: React.FC = () => {
         patientNotes,
       });
 
+      if (ringHandleRef.current) {
+        ringHandleRef.current.stop();
+        ringHandleRef.current = null;
+      }
+
       setAiCallResult(res);
       setSuccessMsg(`AI appointment inquiry completed! Proposed slot found.`);
-      speakText(`Appointment found on ${preferredDate} at ${preferredTime}. Please review and confirm.`);
+      playReminderChime();
+      speakText(`Appointment found with ${doctorName} on ${preferredDate} at ${preferredTime}. Please review and confirm.`);
       await fetchData();
     } catch (err: any) {
+      if (ringHandleRef.current) {
+        ringHandleRef.current.stop();
+        ringHandleRef.current = null;
+      }
       setError(err.message || 'AI hospital calling inquiry failed');
     } finally {
       setIsAiCalling(false);
@@ -442,6 +514,22 @@ export const Calls: React.FC = () => {
                 <PhoneOff className="w-5 h-5" />
                 <span>End Call</span>
               </button>
+            </div>
+          </div>
+
+          {/* Live In-Call Audio Waveform & Status */}
+          <div className="mt-5 pt-4 border-t border-white/15 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-3">
+              <VoiceWaveform state={activeCall.status === 'CALLING' ? 'listening' : 'speaking'} />
+              <span className="font-semibold text-emerald-100">
+                {activeCall.status === 'CALLING'
+                  ? 'Ringing destination phone line (Web Audio VoIP)...'
+                  : 'Live voice call connected • Audio active'}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 text-sky-200/80">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span>Full-Duplex VoIP Session</span>
             </div>
           </div>
         </div>

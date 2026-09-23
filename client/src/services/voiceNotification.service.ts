@@ -87,6 +87,111 @@ export const playReminderChime = (): Promise<void> => {
 };
 
 /**
+ * Realistic in-browser telephone ring generator via Web Audio API.
+ * Synthesizes North American & International dual-tone (440Hz + 480Hz) cadence.
+ * Returns a handle with a .stop() method to halt ringing immediately upon connect/hangup.
+ */
+export const startTelephoneRinging = (): { stop: () => void } => {
+  let isRunning = true;
+  let audioCtx: AudioContext | null = null;
+  let intervalId: any = null;
+
+  try {
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) {
+      return { stop: () => {} };
+    }
+    audioCtx = new AudioCtx();
+
+    const playOneRingBurst = () => {
+      if (!isRunning || !audioCtx || audioCtx.state === 'closed') return;
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+
+      const now = audioCtx.currentTime;
+
+      // 440 Hz (Standard Dial/Ring Tone A4)
+      const osc1 = audioCtx.createOscillator();
+      const gain1 = audioCtx.createGain();
+      osc1.type = 'sine';
+      osc1.frequency.setValueAtTime(440, now);
+      gain1.gain.setValueAtTime(0.12, now);
+      gain1.gain.setValueAtTime(0.12, now + 1.6);
+      gain1.gain.exponentialRampToValueAtTime(0.001, now + 1.8);
+      osc1.connect(gain1);
+      gain1.connect(audioCtx.destination);
+      osc1.start(now);
+      osc1.stop(now + 1.8);
+
+      // 480 Hz (Standard Ring Tone Harmonic)
+      const osc2 = audioCtx.createOscillator();
+      const gain2 = audioCtx.createGain();
+      osc2.type = 'sine';
+      osc2.frequency.setValueAtTime(480, now);
+      gain2.gain.setValueAtTime(0.12, now);
+      gain2.gain.setValueAtTime(0.12, now + 1.6);
+      gain2.gain.exponentialRampToValueAtTime(0.001, now + 1.8);
+      osc2.connect(gain2);
+      gain2.connect(audioCtx.destination);
+      osc2.start(now);
+      osc2.stop(now + 1.8);
+    };
+
+    // Play first burst immediately
+    playOneRingBurst();
+
+    // Standard phone ringing cycle: ring for 1.8s, silent for 2.2s -> repeats every 4s
+    intervalId = setInterval(playOneRingBurst, 4000);
+  } catch (err) {
+    console.warn('[TelephoneRinging] Web Audio error:', err);
+  }
+
+  return {
+    stop: () => {
+      isRunning = false;
+      if (intervalId) clearInterval(intervalId);
+      if (audioCtx && audioCtx.state !== 'closed') {
+        try {
+          audioCtx.close();
+        } catch {
+          // ignore
+        }
+      }
+    },
+  };
+};
+
+/**
+ * Play a standard telephone call termination / hangup beep tone.
+ */
+export const playHangupTone = (): void => {
+  try {
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const now = ctx.currentTime;
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(480, now);
+    osc.frequency.setValueAtTime(320, now + 0.15);
+    gain.gain.setValueAtTime(0.15, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.35);
+    setTimeout(() => {
+      if (ctx.state !== 'closed') ctx.close();
+    }, 400);
+  } catch {
+    // ignore
+  }
+};
+
+/**
  * Stop any ongoing speech synthesis.
  */
 export const stopSpeaking = (): void => {
