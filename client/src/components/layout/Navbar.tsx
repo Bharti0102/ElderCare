@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { StatusBadge } from '../ui/StatusBadge';
 import { DatabaseStatus } from '../../types';
+import { useAuth } from '../../context/AuthContext';
 
 interface NavbarProps {
   serverStatus: 'online' | 'offline' | 'checking';
@@ -25,6 +26,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onRefreshHealth,
   isRefreshingHealth,
 }) => {
+  const { user } = useAuth();
   const navItems = [
     { to: '/', label: 'Overview', icon: LayoutDashboard },
     { to: '/reminders', label: 'Reminders', icon: Bell },
@@ -84,14 +86,26 @@ export const Navbar: React.FC<NavbarProps> = ({
               isRefreshing={isRefreshingHealth}
             />
 
-            <Link
-              to="/profile"
-              className="p-2.5 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors focus:ring-2 focus:ring-brand-300"
-              title="User Profile"
-              aria-label="User Profile"
-            >
-              <User className="w-6 h-6" />
-            </Link>
+            {user ? (
+              <Link
+                to="/profile"
+                className="flex items-center gap-2 py-1.5 px-3 rounded-xl bg-brand-50 hover:bg-brand-100 text-brand-800 text-sm font-semibold transition-colors border border-brand-200"
+                title="Manage Profile & Contacts"
+              >
+                <div className="w-6 h-6 rounded-full bg-brand-600 text-white flex items-center justify-center text-xs font-bold">
+                  {user.name.charAt(0).toUpperCase()}
+                </div>
+                <span className="hidden sm:inline">{user.name.split(' ')[0]}</span>
+              </Link>
+            ) : (
+              <Link
+                to="/login"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold shadow-xs transition-colors"
+              >
+                <User className="w-4 h-4" />
+                <span>Sign In</span>
+              </Link>
+            )}
           </div>
         </div>
       </div>

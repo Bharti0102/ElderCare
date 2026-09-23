@@ -1,6 +1,7 @@
 import express, { Application } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
 import path from 'path';
 import fs from 'fs';
 import routes from './routes';
@@ -38,9 +39,10 @@ export const createApp = (): Application => {
     })
   );
 
-  // Body parser
+  // Body and cookie parsers
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+  app.use(cookieParser());
 
   // Mount API router
   app.use('/api', routes);

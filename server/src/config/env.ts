@@ -10,6 +10,8 @@ const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   CLIENT_URL: z.string().default('http://localhost:5173'),
   MONGODB_URI: z.string().default('mongodb://127.0.0.1:27017/eldercare_ai'),
+  JWT_SECRET: z.string().default('eldercare_ai_super_secret_jwt_key_2026_secure'),
+  JWT_EXPIRES_IN: z.string().default('7d'),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);

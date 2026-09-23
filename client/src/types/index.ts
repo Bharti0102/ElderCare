@@ -24,3 +24,35 @@ export interface HealthData {
   database: DatabaseStatus;
   version: string;
 }
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+}
+
+export interface EmergencyContact {
+  _id: string;
+  userId: string;
+  name: string;
+  relationship: string;
+  phone: string;
+  isPrimary: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateContactDTO {
+  name: string;
+  relationship: string;
+  phone: string;
+  isPrimary?: boolean;
+}
+
+export interface UpdateContactDTO {
+  name?: string;
+  relationship?: string;
+  phone?: string;
+  isPrimary?: boolean;
+}

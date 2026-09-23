@@ -10,29 +10,32 @@ import { Calls } from './pages/Calls';
 import { Prescription } from './pages/Prescription';
 import { Chat } from './pages/Chat';
 import { Profile } from './pages/Profile';
+import { AuthProvider } from './context/AuthContext';
 
 export const App: React.FC = () => {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/landing" element={<Landing />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<Signup />} />
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/landing" element={<Landing />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<Signup />} />
 
-        {/* Main Shell Layout */}
-        <Route element={<Shell />}>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/reminders" element={<Reminders />} />
-          <Route path="/calls" element={<Calls />} />
-          <Route path="/prescription" element={<Prescription />} />
-          <Route path="/chat" element={<Chat />} />
-          <Route path="/profile" element={<Profile />} />
-        </Route>
+          {/* Main Shell Layout */}
+          <Route element={<Shell />}>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/reminders" element={<Reminders />} />
+            <Route path="/calls" element={<Calls />} />
+            <Route path="/prescription" element={<Prescription />} />
+            <Route path="/chat" element={<Chat />} />
+            <Route path="/profile" element={<Profile />} />
+          </Route>
 
-        {/* Fallback */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </BrowserRouter>
+          {/* Fallback */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
   );
 };
 
