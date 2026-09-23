@@ -25,6 +25,8 @@ import {
   initiateCaregiverCall,
   getCalls,
   hangupCall,
+  getTelephonyStatus,
+  TelephonyStatus,
 } from '../services/calling.service';
 import { getContacts } from '../services/contact.service';
 import {
@@ -70,6 +72,7 @@ export const Calls: React.FC = () => {
   const [aiCallResult, setAiCallResult] = useState<HospitalCallResponse | null>(null);
   const [isAiCalling, setIsAiCalling] = useState(false);
   const [isConfirmingAppointment, setIsConfirmingAppointment] = useState(false);
+  const [telephonyStatus, setTelephonyStatus] = useState<TelephonyStatus | null>(null);
 
   const fetchData = async () => {
     try {
@@ -83,6 +86,11 @@ export const Calls: React.FC = () => {
       setContacts(contactList);
       setCalls(callList);
       setAppointments(apptList);
+
+      // Fetch telephony provider info
+      getTelephonyStatus()
+        .then(setTelephonyStatus)
+        .catch(() => {});
 
       // Check if there is an active ongoing call
       const ongoing = callList.find(
@@ -323,6 +331,30 @@ export const Calls: React.FC = () => {
           </Link>
         </div>
       </div>
+
+      {/* Telephony Status Notice (Twilio Voice Trial) */}
+      {telephonyStatus && telephonyStatus.isTrial && (
+        <div className="p-4 bg-gradient-to-r from-sky-50 via-indigo-50 to-sky-50 border border-sky-200/80 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-xs">
+          <div className="flex items-start sm:items-center gap-3">
+            <span className="w-2.5 h-2.5 rounded-full bg-sky-500 animate-pulse mt-0.5 sm:mt-0 flex-shrink-0" />
+            <div>
+              <span className="font-bold text-sky-900">
+                {telephonyStatus.message || 'Twilio Voice (Trial Mode Active)'}:
+              </span>{' '}
+              <span className="text-sky-800">
+                {telephonyStatus.activeFromNumber
+                  ? `Live calls routed through verified number ${telephonyStatus.activeFromNumber}.`
+                  : 'Authenticated without purchased number. Voice simulation & PSTN trial mode ready.'}
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <span className="px-2.5 py-1 rounded-lg bg-sky-100/90 text-sky-800 font-semibold border border-sky-300 flex-shrink-0">
+              Twilio Trial Connected
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Tabs: Caregiver Calling vs Hospital Calling */}
       <div className="flex border-b border-slate-200 gap-4">

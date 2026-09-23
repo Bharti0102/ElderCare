@@ -203,4 +203,23 @@ export class CallingService {
     await call.save();
     return call;
   }
+
+  /**
+   * Get active telephony provider status & trial information
+   */
+  public static async getTelephonyStatus() {
+    const telephony = TelephonyFactory.getProvider();
+    if (telephony.getProviderStatus) {
+      return await telephony.getProviderStatus();
+    }
+    return {
+      provider: telephony.name,
+      configured: true,
+      isTrial: false,
+      hasPurchasedNumber: false,
+      hasVerifiedCallerId: false,
+      activeFromNumber: null,
+      message: 'Telephony provider active.',
+    };
+  }
 }

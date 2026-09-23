@@ -95,4 +95,17 @@ export class CallingController {
       next(error);
     }
   }
+
+  public static async getTelephonyStatus(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const status = await CallingService.getTelephonyStatus();
+      sendSuccess(res, status, 'Telephony status retrieved successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
 }

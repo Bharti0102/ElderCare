@@ -10,6 +10,9 @@ router.use(authenticate);
 // Caregiver direct-dial
 router.post('/caregiver', CallingController.initiateCaregiverCall);
 
+// Telephony provider status (Twilio trial / live status)
+router.get('/telephony/status', CallingController.getTelephonyStatus);
+
 // Call logs & lifecycle
 router.get('/', CallingController.getCalls);
 router.get('/:id', CallingController.getCallById);

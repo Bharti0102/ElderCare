@@ -19,6 +19,18 @@ export interface TelephonyCallResult {
   details?: any;
 }
 
+export interface TelephonyProviderStatus {
+  provider: string;
+  configured: boolean;
+  isTrial: boolean;
+  accountSid?: string;
+  hasPurchasedNumber: boolean;
+  hasVerifiedCallerId: boolean;
+  activeFromNumber?: string | null;
+  message: string;
+  instructions?: string;
+}
+
 export interface ITelephonyProvider {
   readonly name: string;
   initiateCall(params: InitiateCallParams): Promise<TelephonyCallResult>;
@@ -26,4 +38,5 @@ export interface ITelephonyProvider {
     providerCallId: string
   ): Promise<{ status: string; durationSeconds?: number }>;
   terminateCall(providerCallId: string): Promise<boolean>;
+  getProviderStatus?(): Promise<TelephonyProviderStatus>;
 }

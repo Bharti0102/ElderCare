@@ -91,4 +91,16 @@ export class MockTelephonyProvider implements ITelephonyProvider {
     }
     return true;
   }
+
+  public async getProviderStatus() {
+    return {
+      provider: this.name,
+      configured: true,
+      isTrial: false,
+      hasPurchasedNumber: false,
+      hasVerifiedCallerId: false,
+      activeFromNumber: null,
+      message: 'Mock telephony provider active for simulation testing.',
+    };
+  }
 }

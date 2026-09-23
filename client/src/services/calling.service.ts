@@ -59,5 +59,25 @@ export const hangupCall = async (id: string): Promise<Call> => {
   if (response.data.success && response.data.data) {
     return response.data.data.call;
   }
-  throw new Error(response.data.error?.message || 'Failed to end call');
+  throw new Error(response.data.error?.message || 'Failed to hang up call');
+};
+
+export interface TelephonyStatus {
+  provider: string;
+  configured: boolean;
+  isTrial: boolean;
+  accountSid?: string;
+  hasPurchasedNumber: boolean;
+  hasVerifiedCallerId: boolean;
+  activeFromNumber?: string | null;
+  message: string;
+  instructions?: string;
+}
+
+export const getTelephonyStatus = async (): Promise<TelephonyStatus> => {
+  const response = await api.get<ApiResponse<TelephonyStatus>>('/calls/telephony/status');
+  if (response.data.success && response.data.data) {
+    return response.data.data;
+  }
+  throw new Error(response.data.error?.message || 'Failed to fetch telephony status');
 };
