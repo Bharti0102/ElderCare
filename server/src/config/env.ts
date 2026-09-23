@@ -12,6 +12,9 @@ const envSchema = z.object({
   MONGODB_URI: z.string().default('mongodb://127.0.0.1:27017/eldercare_ai'),
   JWT_SECRET: z.string().default('eldercare_ai_super_secret_jwt_key_2026_secure'),
   JWT_EXPIRES_IN: z.string().default('7d'),
+  LLM_PROVIDER: z.enum(['mock', 'gemini', 'openai']).default('mock'),
+  GEMINI_API_KEY: z.string().optional().default(''),
+  OPENAI_API_KEY: z.string().optional().default(''),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);

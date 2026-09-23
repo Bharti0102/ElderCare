@@ -1,18 +1,32 @@
 # ElderCare AI — Project Status
 
-## Overall Status: Phase 1 Completed
+## Overall Status: Phase 2 Completed
 
 | Phase | Description | Status | Completion Date |
 |-------|-------------|--------|-----------------|
 | **Phase 0** | Foundation (Server, Client, DB, Routing, Health API, Docs) | **Completed** | 2026-09-22 |
 | **Phase 1** | Authentication + Emergency Contacts | **Completed** | 2026-09-23 |
-| **Phase 2** | AI Orchestrator + Companion | **Next in Queue** | — |
-| **Phase 3** | Reminder Agent (Natural Language Reminders, Scheduler) | Planned | — |
+| **Phase 2** | AI Orchestrator + Companion | **Completed** | 2026-09-23 |
+| **Phase 3** | Reminder Agent (Natural Language Reminders, Scheduler) | **Next in Queue** | — |
 | **Phase 4** | Prescription Intelligence (Upload, OCR/Vision, Validation) | Planned | — |
 | **Phase 5** | Caregiver Calling (Calling Tool, Twilio/Provider Integration) | Planned | — |
 | **Phase 6** | Hospital Calling + Appointment Assistance | Planned | — |
 | **Phase 7** | Voice Pipeline (STT, TTS, Voice-first interaction) | Planned | — |
 | **Phase 8** | Integration, Accessibility & Final Polish | Planned | — |
+
+---
+
+## Phase 2 Checklist
+- [x] Provider abstraction interface (`LLMProvider`) supporting mock and live adapters (`MockLLMProvider`, `GeminiLLMProvider`)
+- [x] Conversation persistence model (`Conversation`) with user-scoped message history
+- [x] AI Tool interface and `ChatTool` implementation delegating to `ChatService` and `LLMService`
+- [x] Central `OrchestratorService` implementing the invariant: `LLM -> Orchestrator -> Tool -> Service -> Database`
+- [x] Strict Medical Guardrails: symptom inquiry detection, refusal to prescribe/diagnose, and emergency guidance
+- [x] Intent Classification handling `CHAT`, `CREATE_REMINDER`, `CALL_CAREGIVER`, `PRESCRIPTION`, and `HOSPITAL_CALL`
+- [x] Protected API endpoints: `POST /api/agent`, `GET /api/chat/history`, `DELETE /api/chat/history`
+- [x] Frontend AI Companion interface (`Chat.tsx`) with accessible chat bubbles, auto-scroll, and quick prompt chips
+- [x] End-to-end verification passing all 11 test assertions (storytelling, loneliness, guardrails, future intents, persistence)
+- [x] Clean architecture preserved: Route -> Controller -> Service -> Integration / Model
 
 ---
 
