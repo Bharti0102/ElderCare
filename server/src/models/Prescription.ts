@@ -8,6 +8,8 @@ export interface IPrescriptionMedicine {
   frequency?: string;
   instructions?: string;
   duration?: string;
+  activeIngredients?: string;   // Generic chemical salts / formulation
+  drugClass?: string;           // Pharmacological class
   purpose?: string;            // Why it is prescribed
   timingInstructions?: string; // When/how to take it
   precautions?: string;        // Common precautions
@@ -15,6 +17,7 @@ export interface IPrescriptionMedicine {
   whatToAvoid?: string;        // What to avoid
   warnings?: string;           // Important warnings
   simplifiedExplanation?: string; // AI explains in simple language
+  researchSource?: string;      // Real AI/Clinical source
 }
 
 export interface IPrescription extends Document {
@@ -64,6 +67,14 @@ const PrescriptionMedicineSchema = new Schema<IPrescriptionMedicine>(
       type: String,
       trim: true,
     },
+    activeIngredients: {
+      type: String,
+      trim: true,
+    },
+    drugClass: {
+      type: String,
+      trim: true,
+    },
     purpose: {
       type: String,
       trim: true,
@@ -89,6 +100,10 @@ const PrescriptionMedicineSchema = new Schema<IPrescriptionMedicine>(
       trim: true,
     },
     simplifiedExplanation: {
+      type: String,
+      trim: true,
+    },
+    researchSource: {
       type: String,
       trim: true,
     },

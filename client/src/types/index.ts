@@ -102,6 +102,8 @@ export interface PrescriptionMedicine {
   frequency?: string;
   instructions?: string;
   duration?: string;
+  activeIngredients?: string;   // Generic chemical salts / formulation
+  drugClass?: string;           // Pharmacological class
   purpose?: string;            // Why it is prescribed
   timingInstructions?: string; // When/how to take it
   precautions?: string;        // Common precautions
@@ -109,6 +111,7 @@ export interface PrescriptionMedicine {
   whatToAvoid?: string;        // What to avoid
   warnings?: string;           // Important warnings
   simplifiedExplanation?: string; // AI explains in simple language
+  researchSource?: string;      // Research source (Gemini AI, OpenFDA, Pharmacopeia)
 }
 
 export interface Prescription {

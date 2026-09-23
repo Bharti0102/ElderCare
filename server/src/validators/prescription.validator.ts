@@ -6,6 +6,8 @@ export const medicineValidator = z.object({
   frequency: z.string().trim().optional(),
   instructions: z.string().trim().optional(),
   duration: z.string().trim().optional(),
+  activeIngredients: z.string().trim().optional(),
+  drugClass: z.string().trim().optional(),
   purpose: z.string().trim().optional(),
   timingInstructions: z.string().trim().optional(),
   precautions: z.string().trim().optional(),
@@ -13,6 +15,7 @@ export const medicineValidator = z.object({
   whatToAvoid: z.string().trim().optional(),
   warnings: z.string().trim().optional(),
   simplifiedExplanation: z.string().trim().optional(),
+  researchSource: z.string().trim().optional(),
 });
 
 export const confirmPrescriptionSchema = z.object({

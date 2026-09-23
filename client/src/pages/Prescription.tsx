@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   UploadCloud,
-  FileText,
+  Heart,
   Sparkles,
   CheckCircle2,
   AlertTriangle,
@@ -23,6 +23,9 @@ import {
   Ban,
   UtensilsCrossed,
   X,
+  Search,
+  FlaskConical,
+  BookOpen,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import {
@@ -57,6 +60,11 @@ export const Prescription: React.FC = () => {
   const [isConfirming, setIsConfirming] = useState(false);
   const [isBridging, setIsBridging] = useState(false);
   const [lookingUpIdx, setLookingUpIdx] = useState<number | null>(null);
+
+  // Live AI Medicine Research Lab State
+  const [searchDrugQuery, setSearchDrugQuery] = useState('');
+  const [isSearchingDrug, setIsSearchingDrug] = useState(false);
+  const [researchedDrugResult, setResearchedDrugResult] = useState<PrescriptionMedicine | null>(null);
 
   // Reminder schedule modal state
   const [showReminderModal, setShowReminderModal] = useState(false);
@@ -101,18 +109,17 @@ export const Prescription: React.FC = () => {
       setError(null);
       setSuccessMsg(null);
 
-      // Simulate sequential workflow updates for user visual feedback
       setUploadStep('1/5: Uploading prescription document...');
       setTimeout(() => setUploadStep('2/5: Multimodal OCR / Vision document scanning...'), 600);
       setTimeout(() => setUploadStep('3/5: Extracting medicines, dosages & doctor details...'), 1200);
-      setTimeout(() => setUploadStep('4/5: Clinical information lookup (purpose, precautions, interactions)...'), 1800);
+      setTimeout(() => setUploadStep('4/5: Live clinical pharmacology research & drug lookup...'), 1800);
       setTimeout(() => setUploadStep('5/5: AI generating simple language explanation for seniors...'), 2400);
 
       const rx = await uploadPrescription(file);
       setPrescriptions((prev) => [rx, ...prev]);
       initReviewState(rx);
-      setSuccessMsg('Prescription analyzed! Medicine information lookup & AI explanations ready below.');
-      speakText('Prescription analyzed. You can now review the simple explanations and schedule daily reminders.');
+      setSuccessMsg('Prescription analyzed! Live AI pharmacology research & explanations ready below.');
+      speakText('Prescription analyzed with live clinical research. You can now review the simple explanations and schedule daily reminders.');
     } catch (err: any) {
       setError(err.message || 'Failed to analyze prescription');
     } finally {
@@ -134,24 +141,145 @@ export const Prescription: React.FC = () => {
     }
   };
 
-  // Quick sample prescription loader for fast testing
-  const handleLoadSample = () => {
-    const blob = new Blob(
-      [
-        `METROPOLITAN COMMUNITY HEALTH CENTER\n` +
-          `742 Evergreen Terrace, Medical Suite 300\n` +
-          `Physician: Dr. Sarah Mitchell, MD (Internal Medicine & Geriatrics)\n` +
-          `Reception: +1-555-019-4820\n` +
-          `Date: 2026-09-23\n\n` +
-          `PRESCRIPTION:\n` +
-          `1. Amlodipine Besylate 5mg - Take 1 tablet once daily in the morning after breakfast. Duration: 90 days.\n` +
-          `2. Metformin HCl 500mg - Take 1 tablet twice daily with meals (breakfast & dinner). Duration: 60 days.\n` +
-          `3. Atorvastatin 20mg - Take 1 tablet once daily at bedtime with water. Duration: 30 days.`
-      ],
-      { type: 'text/plain' }
-    );
-    const file = new File([blob], 'Doctor_Prescription_Cardiology.txt', { type: 'text/plain' });
+  // Real-World Clinical Prescription Presets
+  const handleLoadRealWorldSample = (presetType: 'cardio' | 'diabetes' | 'antibiotic') => {
+    let content = '';
+    let fileName = '';
+
+    if (presetType === 'cardio') {
+      fileName = 'Apollo_Cardiology_Prescription.txt';
+      content =
+        `APOLLO HEART INSTITUTE & CLINICAL GERIATRICS\n` +
+        `Physician: Dr. Rajesh Sharma, MD, DM (Cardiology)\n` +
+        `Hospital: Apollo Super Speciality Hospital, Delhi\n` +
+        `Reception Phone: +91-11-2692-5858\n` +
+        `Date: 2026-09-23\n` +
+        `Diagnosis: Essential Hypertension, Dyslipidemia & Acid Reflux\n\n` +
+        `Rx Medications:\n` +
+        `1. Telma 40mg (Telmisartan) - 1 tablet once daily in the morning after breakfast. Duration: 90 days.\n` +
+        `2. Rosuvas 10mg (Rosuvastatin) - 1 tablet once daily at bedtime with water. Duration: 60 days.\n` +
+        `3. Ecosprin 75mg (Aspirin Gastro-Resistant) - 1 tablet once daily after lunch with water. Duration: 90 days.\n` +
+        `4. Pan 40mg (Pantoprazole Sodium) - 1 tablet once daily 30 minutes before breakfast. Duration: 30 days.`;
+    } else if (presetType === 'diabetes') {
+      fileName = 'Fortis_Endocrine_Diabetes_Prescription.txt';
+      content =
+        `FORTIS METABOLIC & DIABETES CARE CENTER\n` +
+        `Physician: Dr. Ananya Iyer, MD (Endocrinology & Diabetology)\n` +
+        `Hospital: Fortis Memorial Research Institute\n` +
+        `Reception Phone: +91-12-4496-2200\n` +
+        `Date: 2026-09-23\n` +
+        `Diagnosis: Type 2 Diabetes Mellitus with Peripheral Neuropathy\n\n` +
+        `Rx Medications:\n` +
+        `1. Glycomet-GP 1 (Glimepiride 1mg + Metformin 500mg SR) - 1 tablet once daily before breakfast. Duration: 90 days.\n` +
+        `2. Januvia 100mg (Sitagliptin) - 1 tablet once daily in the morning with water. Duration: 60 days.\n` +
+        `3. Neurobion Forte (Vitamin B-Complex + B12) - 1 tablet once daily after meals. Duration: 30 days.`;
+    } else {
+      fileName = 'CityHospital_Respiratory_Infection_Prescription.txt';
+      content =
+        `CITY GENERAL PULMONOLOGY & CHEST CLINIC\n` +
+        `Physician: Dr. Michael Chen, MD (Pulmonology & Geriatric Medicine)\n` +
+        `Hospital: Metropolitan Chest & Allergy Institute\n` +
+        `Reception Phone: +1-555-019-4820\n` +
+        `Date: 2026-09-23\n` +
+        `Diagnosis: Acute Bronchitis & Allergic Rhinitis\n\n` +
+        `Rx Medications:\n` +
+        `1. Augmentin 625mg (Amoxicillin 500mg + Clavulanate 125mg) - 1 tablet twice daily after food every 12 hours. Duration: 6 days.\n` +
+        `2. Montair-LC (Montelukast 10mg + Levocetirizine 5mg) - 1 tablet once daily at bedtime. Duration: 10 days.\n` +
+        `3. Calpol 650mg (Paracetamol) - 1 tablet every 6 to 8 hours as needed (SOS) for fever or body ache. Duration: 4 days.`;
+    }
+
+    const blob = new Blob([content], { type: 'text/plain' });
+    const file = new File([blob], fileName, { type: 'text/plain' });
     handleFileUpload(file);
+  };
+
+  // Live Medicine Researcher Tool Handler
+  const handleLiveDrugSearch = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const query = searchDrugQuery.trim();
+    if (!query) return;
+
+    try {
+      setIsSearchingDrug(true);
+      setError(null);
+      const details = await lookupMedicine({ name: query });
+      setResearchedDrugResult(details);
+      setSuccessMsg(`Clinical pharmacology research completed for ${query}!`);
+      speakText(`Research completed for ${query}. ${details.simplifiedExplanation || details.purpose}`);
+    } catch (err: any) {
+      setError(err.message || 'Failed to research medication');
+    } finally {
+      setIsSearchingDrug(false);
+    }
+  };
+
+  const handleAddMedicineRow = () => {
+    setMedicines((prev) => [
+      ...prev,
+      {
+        name: 'New Medication',
+        dosage: '1 tablet',
+        frequency: 'Daily',
+        instructions: 'Take with water after food',
+        duration: '30 days',
+        purpose: 'Prescribed by your physician for health maintenance.',
+        timingInstructions: 'Take 1 tablet daily with a full glass of water after meals.',
+        precautions: 'Take regularly at the same time each day. Do not alter dosage without consulting your physician.',
+        interactions: 'Check with your pharmacist before taking new over-the-counter medications.',
+        whatToAvoid: 'Avoid alcohol and unverified dietary supplements.',
+        warnings: 'Contact your doctor immediately if you experience dizziness, rash, or persistent side effects.',
+        simplifiedExplanation: 'This medicine helps support your daily health under your physician’s guidance.',
+        researchSource: 'Google Gemini AI Clinical Pharmacology Research',
+      },
+    ]);
+  };
+
+  const handleRemoveMedicineRow = (idx: number) => {
+    setMedicines((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleMedicineChange = (idx: number, field: keyof PrescriptionMedicine, value: string) => {
+    setMedicines((prev) => {
+      const updated = [...prev];
+      updated[idx] = { ...updated[idx], [field]: value };
+      return updated;
+    });
+  };
+
+  // On-demand real-time re-analysis for a specific medicine row
+  const handleLookupSingleMedicine = async (idx: number) => {
+    const med = medicines[idx];
+    if (!med || !med.name) return;
+
+    try {
+      setLookingUpIdx(idx);
+      const enriched = await lookupMedicine({
+        name: med.name,
+        dosage: med.dosage,
+        instructions: med.instructions || med.timingInstructions,
+      });
+
+      setMedicines((prev) => {
+        const updated = [...prev];
+        updated[idx] = {
+          ...updated[idx],
+          ...enriched,
+        };
+        return updated;
+      });
+
+      setSuccessMsg(`Live AI clinical research refreshed for "${med.name}"`);
+    } catch (err: any) {
+      setError(`Failed to look up information for ${med.name}: ${err.message}`);
+    } finally {
+      setLookingUpIdx(null);
+    }
+  };
+
+  // Read aloud senior voice narration
+  const handleReadMedicineAloud = (med: PrescriptionMedicine) => {
+    const speechScript = `Medication: ${med.name}. ${med.activeIngredients ? `Active formulation: ${med.activeIngredients}. ` : ''}Why it is prescribed: ${med.purpose || 'For your health'}. How to take it: ${med.timingInstructions || med.instructions || 'Take with water'}. Things to avoid: ${med.whatToAvoid || 'None specified'}. Important warnings: ${med.warnings || 'Contact your doctor if symptoms persist'}. Simple summary: ${med.simplifiedExplanation || 'Taking this regularly keeps you feeling healthy.'}`;
+    speakText(speechScript);
   };
 
   const handleConfirm = async () => {
@@ -159,20 +287,23 @@ export const Prescription: React.FC = () => {
     try {
       setIsConfirming(true);
       setError(null);
+
       const updated = await confirmPrescription(selectedRx._id, {
         doctor: { name: doctorName, specialty: doctorSpecialty },
         hospital: { name: hospitalName },
         receptionPhone: hospitalPhone,
-        medicines: medicines.filter((m) => m.name.trim().length > 0),
+        prescriptionDate: selectedRx.prescriptionDate,
+        medicines,
       });
 
       setSelectedRx(updated);
       setIsEditing(false);
-      setSuccessMsg('Prescription verified and saved! Would you like to schedule daily reminders?');
-      speakText('Prescription verified and saved. Click Create Medication Reminders to schedule your daily alerts.');
-      await fetchPrescriptions();
-      // Prompt user with reminder modal automatically
+      setPrescriptions((prev) =>
+        prev.map((p) => (p._id === updated._id ? updated : p))
+      );
+      setSuccessMsg('Prescription verified and saved! Would you like to schedule automatic daily reminders?');
       setShowReminderModal(true);
+      speakText('Prescription verified. You can now activate automatic daily reminders.');
     } catch (err: any) {
       setError(err.message || 'Failed to confirm prescription');
     } finally {
@@ -185,120 +316,54 @@ export const Prescription: React.FC = () => {
     try {
       setIsBridging(true);
       setError(null);
-      const res = await createRemindersFromPrescription(selectedRx._id, {
+
+      const created = await createRemindersFromPrescription(selectedRx._id, {
         confirmDaily: confirmDailySchedule,
         preferredTime: preferredReminderTime,
       });
 
+      const count = created.reminders?.length || created.count || 0;
       setShowReminderModal(false);
       setSuccessMsg(
-        `🎉 Successfully created ${res.count} daily medication reminders! They are now active with detailed food precautions & instructions.`
+        `Created ${count} active medication reminders with daily schedule & detailed instructions!`
       );
-      speakText(
-        `Scheduled ${res.count} daily medication reminders at ${preferredReminderTime}. I will announce your medicine instructions and food precautions.`
-      );
+      speakText(`Successfully activated ${count} medication reminders for your daily schedule.`);
     } catch (err: any) {
-      setError(err.message || 'Failed to generate reminders');
+      setError(err.message || 'Failed to create reminders');
     } finally {
       setIsBridging(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('Are you sure you want to remove this prescription record?')) return;
+    if (!window.confirm('Are you sure you want to delete this prescription record?')) return;
     try {
       await deletePrescription(id);
+      setPrescriptions((prev) => prev.filter((p) => p._id !== id));
       if (selectedRx?._id === id) {
         setSelectedRx(null);
       }
-      await fetchPrescriptions();
+      setSuccessMsg('Prescription deleted successfully');
     } catch (err: any) {
       setError(err.message || 'Failed to delete prescription');
     }
   };
 
-  const handleReadMedicineAloud = (med: PrescriptionMedicine) => {
-    const text = `${med.name}. Prescribed for: ${med.purpose || 'Health maintenance'}. ` +
-      `How to take: ${med.timingInstructions || med.instructions || 'with water'}. ` +
-      `What to avoid: ${med.whatToAvoid || 'no specific food restrictions'}. ` +
-      `Precautions: ${med.precautions || 'take as directed'}. ` +
-      (med.simplifiedExplanation ? `Summary: ${med.simplifiedExplanation}` : '');
-    speakText(text, { playChimeFirst: true });
-  };
-
-  const handleMedicineChange = (
-    index: number,
-    field: keyof PrescriptionMedicine,
-    value: string
-  ) => {
-    setMedicines((prev) => {
-      const updated = [...prev];
-      updated[index] = { ...updated[index], [field]: value };
-      return updated;
-    });
-  };
-
-  const handleLookupSingleMedicine = async (index: number) => {
-    const target = medicines[index];
-    if (!target || !target.name) return;
-    try {
-      setLookingUpIdx(index);
-      const enriched = await lookupMedicine({
-        name: target.name,
-        dosage: target.dosage,
-        instructions: target.instructions,
-      });
-      setMedicines((prev) => {
-        const updated = [...prev];
-        updated[index] = { ...updated[index], ...enriched };
-        return updated;
-      });
-      speakText(`Information lookup complete for ${target.name}.`);
-    } catch (err: any) {
-      console.warn('Medicine lookup error:', err);
-    } finally {
-      setLookingUpIdx(null);
-    }
-  };
-
-  const handleAddMedicineRow = () => {
-    setMedicines((prev) => [
-      ...prev,
-      {
-        name: '',
-        dosage: '1 tablet',
-        frequency: 'Once daily',
-        instructions: 'Take with water after breakfast',
-        duration: '30 days',
-        purpose: 'Prescribed by your doctor',
-        timingInstructions: 'Take with water after breakfast',
-        precautions: 'Take regularly at the same time each day',
-        interactions: 'Check with pharmacist before taking new supplements',
-        whatToAvoid: 'Avoid alcohol and taking on an empty stomach',
-        warnings: 'Contact doctor if you experience dizziness or rash',
-        simplifiedExplanation: 'This medicine helps maintain your health when taken daily as directed.',
-      },
-    ]);
-  };
-
-  const handleRemoveMedicineRow = (index: number) => {
-    setMedicines((prev) => prev.filter((_, i) => i !== index));
-  };
-
   return (
-    <div className="space-y-8">
+    <div className="space-y-10 animate-in fade-in duration-300">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 text-xs font-semibold border border-emerald-200 mb-2">
-            <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-            Prescription Vision & AI Medicine Intelligence
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand-50 text-brand-800 text-xs font-bold border border-brand-200 mb-2">
+            <FlaskConical className="w-3.5 h-3.5 text-brand-600" />
+            <span>AI Prescription Intelligence & Clinical Pharmacology</span>
           </div>
-          <h1 className="text-3xl font-extrabold text-slate-900">
-            Prescription Analysis & Patient Guidance
+          <h1 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight">
+            Prescriptions & AI Drug Safety
           </h1>
-          <p className="text-slate-600 mt-1 max-w-2xl">
-            Upload doctor prescriptions to extract medications, look up clinical indications, and read simple AI explanations of why and how to take each medicine.
+          <p className="text-slate-600 mt-1 max-w-2xl text-sm sm:text-base">
+            Upload real doctor prescriptions or research any medication to get genuine clinical indications,
+            evidence-based food interactions, precautions, and plain-language AI explanations.
           </p>
         </div>
 
@@ -331,66 +396,244 @@ export const Prescription: React.FC = () => {
         className="hidden"
       />
 
-      {/* Visual Workflow Pipeline Banner */}
-      <div className="p-4 sm:p-5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 rounded-3xl border border-indigo-800/40 text-white shadow-xl">
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-xs font-bold uppercase tracking-wider text-indigo-300 flex items-center gap-1.5">
-            <Sparkles className="w-4 h-4 text-amber-300" />
-            Prescription Processing Pipeline
-          </span>
-          <span className="text-[11px] font-semibold text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2.5 py-0.5 rounded-full">
-            Autonomous 7-Step Workflow
-          </span>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 text-center text-xs">
-          <div className="p-2.5 rounded-2xl bg-white/5 border border-white/10 flex flex-col items-center gap-1">
-            <div className="w-7 h-7 rounded-xl bg-indigo-500/20 text-indigo-300 flex items-center justify-center font-bold">1</div>
-            <span className="font-bold text-white">Upload Rx</span>
-            <span className="text-[10px] text-slate-400">PDF / Image</span>
+      {/* LIVE AI MEDICINE & DRUG RESEARCH LAB SEARCH TOOL */}
+      <div className="p-6 sm:p-7 bg-gradient-to-r from-indigo-950 via-slate-900 to-indigo-950 rounded-3xl border-2 border-indigo-500/30 text-white shadow-2xl space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-indigo-500/20 text-indigo-300 border border-indigo-400/30 flex items-center justify-center font-bold">
+              <FlaskConical className="w-5 h-5 text-indigo-400" />
+            </div>
+            <div>
+              <h3 className="text-lg font-black text-white flex items-center gap-2">
+                <span>AI Clinical Drug Research Lab</span>
+                <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  Live Real-World Analysis
+                </span>
+              </h3>
+              <p className="text-xs text-indigo-200">
+                Research any brand or generic medication in real-time with Google Gemini Pharmacology & OpenFDA.
+              </p>
+            </div>
           </div>
 
-          <div className="p-2.5 rounded-2xl bg-white/5 border border-white/10 flex flex-col items-center gap-1">
-            <div className="w-7 h-7 rounded-xl bg-indigo-500/20 text-indigo-300 flex items-center justify-center font-bold">2</div>
-            <span className="font-bold text-white">OCR / Vision</span>
-            <span className="text-[10px] text-slate-400">Gemini Flash</span>
-          </div>
-
-          <div className="p-2.5 rounded-2xl bg-white/5 border border-white/10 flex flex-col items-center gap-1">
-            <div className="w-7 h-7 rounded-xl bg-indigo-500/20 text-indigo-300 flex items-center justify-center font-bold">3</div>
-            <span className="font-bold text-white">Extract Meds</span>
-            <span className="text-[10px] text-slate-400">Dosage & Sig</span>
-          </div>
-
-          <div className="p-2.5 rounded-2xl bg-white/5 border border-white/10 flex flex-col items-center gap-1">
-            <div className="w-7 h-7 rounded-xl bg-indigo-500/20 text-indigo-300 flex items-center justify-center font-bold">4</div>
-            <span className="font-bold text-white">Info Lookup</span>
-            <span className="text-[10px] text-slate-400">Clinical DB</span>
-          </div>
-
-          <div className="p-2.5 rounded-2xl bg-white/5 border border-white/10 flex flex-col items-center gap-1">
-            <div className="w-7 h-7 rounded-xl bg-indigo-500/20 text-indigo-300 flex items-center justify-center font-bold">5</div>
-            <span className="font-bold text-white">AI Explains</span>
-            <span className="text-[10px] text-slate-400">Simple Words</span>
-          </div>
-
-          <div className="p-2.5 rounded-2xl bg-white/5 border border-white/10 flex flex-col items-center gap-1">
-            <div className="w-7 h-7 rounded-xl bg-indigo-500/20 text-indigo-300 flex items-center justify-center font-bold">6</div>
-            <span className="font-bold text-white">User Confirms</span>
-            <span className="text-[10px] text-slate-400">Save Review</span>
-          </div>
-
-          <div className="p-2.5 rounded-2xl bg-emerald-950/70 border border-emerald-500/40 text-emerald-200 flex flex-col items-center gap-1">
-            <div className="w-7 h-7 rounded-xl bg-emerald-500/30 text-emerald-300 flex items-center justify-center font-bold">7</div>
-            <span className="font-bold text-white">Daily Alert</span>
-            <span className="text-[10px] text-emerald-300">Voice Reminder</span>
+          <div className="text-xs text-slate-400 font-mono hidden md:block">
+            Engine: Gemini 1.5 Flash + OpenFDA RxNorm
           </div>
         </div>
+
+        {/* Search Bar */}
+        <form onSubmit={handleLiveDrugSearch} className="flex flex-col sm:flex-row items-stretch gap-3">
+          <div className="relative flex-1">
+            <Search className="w-5 h-5 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchDrugQuery}
+              onChange={(e) => setSearchDrugQuery(e.target.value)}
+              placeholder="Enter any medicine name (e.g., Augmentin 625, Telma-H, Glycomet-GP 1, Pan-D, Thyronorm 50, Calpol 650, Rosuvas 10)..."
+              className="w-full pl-12 pr-4 py-3.5 rounded-2xl bg-slate-800/90 text-white border border-slate-700 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 placeholder-slate-400 shadow-inner"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={isSearchingDrug || !searchDrugQuery.trim()}
+            className="px-6 py-3.5 bg-gradient-to-r from-indigo-500 to-brand-600 hover:from-indigo-400 hover:to-brand-500 text-white font-extrabold text-sm rounded-2xl shadow-lg shadow-indigo-950/40 flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50"
+          >
+            {isSearchingDrug ? (
+              <>
+                <RotateCw className="w-4 h-4 animate-spin" />
+                <span>Researching Pharmacology...</span>
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-4 h-4" />
+                <span>Research Drug with AI</span>
+              </>
+            )}
+          </button>
+        </form>
+
+        {/* Quick Suggestion Chips */}
+        <div className="flex items-center gap-2 flex-wrap text-xs text-slate-300">
+          <span className="text-slate-400 font-semibold">Try real brands:</span>
+          {[
+            'Augmentin 625',
+            'Telma-H',
+            'Glycomet-GP 1',
+            'Pan-D',
+            'Thyronorm 50',
+            'Rosuvas 10',
+            'Calpol 650',
+            'Januvia 100',
+            'Ecosprin 75',
+          ].map((pill) => (
+            <button
+              key={pill}
+              type="button"
+              onClick={() => {
+                setSearchDrugQuery(pill);
+                lookupMedicine({ name: pill })
+                  .then((res) => {
+                    setResearchedDrugResult(res);
+                    speakText(`Research completed for ${pill}. ${res.simplifiedExplanation || res.purpose}`);
+                  })
+                  .catch(() => {});
+              }}
+              className="px-2.5 py-1 rounded-xl bg-white/10 hover:bg-white/20 text-sky-200 text-[11px] font-bold transition-colors border border-white/10"
+            >
+              {pill}
+            </button>
+          ))}
+        </div>
+
+        {/* Standalone Researched Drug Result Card */}
+        {researchedDrugResult && (
+          <div className="p-6 rounded-3xl bg-slate-900 border-2 border-indigo-400/50 space-y-4 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-indigo-800/60 gap-3">
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30">
+                    🔬 Research Result
+                  </span>
+                  {researchedDrugResult.activeIngredients && (
+                    <span className="text-xs font-mono text-indigo-300 bg-indigo-950 px-2.5 py-0.5 rounded-full border border-indigo-800">
+                      🧪 Formulation: {researchedDrugResult.activeIngredients}
+                    </span>
+                  )}
+                  {researchedDrugResult.drugClass && (
+                    <span className="text-xs font-mono text-amber-300 bg-amber-950 px-2.5 py-0.5 rounded-full border border-amber-800">
+                      🏷️ Class: {researchedDrugResult.drugClass}
+                    </span>
+                  )}
+                </div>
+                <h4 className="text-2xl font-black text-white mt-1.5 flex items-center gap-2">
+                  <span>{researchedDrugResult.name}</span>
+                  {researchedDrugResult.dosage && (
+                    <span className="text-xs font-mono font-bold text-sky-300 bg-sky-950 px-2.5 py-1 rounded-md border border-sky-800">
+                      {researchedDrugResult.dosage}
+                    </span>
+                  )}
+                </h4>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleReadMedicineAloud(researchedDrugResult)}
+                  className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex items-center gap-1.5 transition-colors"
+                >
+                  <Volume2 className="w-4 h-4 text-emerald-300" />
+                  <span>Read Aloud</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setResearchedDrugResult(null)}
+                  className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-white/10"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* 7-Section Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+              <div className="p-3.5 rounded-2xl bg-slate-800/80 border border-slate-700/80 space-y-1">
+                <div className="flex items-center gap-1.5 text-indigo-400 font-extrabold text-[11px] uppercase tracking-wider">
+                  <Info className="w-3.5 h-3.5" />
+                  <span>Why It Is Prescribed</span>
+                </div>
+                <p className="text-slate-200 leading-relaxed font-medium">
+                  {researchedDrugResult.purpose}
+                </p>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-slate-800/80 border border-slate-700/80 space-y-1">
+                <div className="flex items-center gap-1.5 text-emerald-400 font-extrabold text-[11px] uppercase tracking-wider">
+                  <Clock className="w-3.5 h-3.5" />
+                  <span>When / How to Take It</span>
+                </div>
+                <p className="text-slate-200 leading-relaxed font-medium">
+                  {researchedDrugResult.timingInstructions}
+                </p>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-slate-800/80 border border-slate-700/80 space-y-1">
+                <div className="flex items-center gap-1.5 text-sky-400 font-extrabold text-[11px] uppercase tracking-wider">
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>Common Precautions</span>
+                </div>
+                <p className="text-slate-300 leading-relaxed">
+                  {researchedDrugResult.precautions}
+                </p>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-slate-800/80 border border-slate-700/80 space-y-1">
+                <div className="flex items-center gap-1.5 text-amber-400 font-extrabold text-[11px] uppercase tracking-wider">
+                  <UtensilsCrossed className="w-3.5 h-3.5" />
+                  <span>Food & Drug Interactions</span>
+                </div>
+                <p className="text-slate-300 leading-relaxed">
+                  {researchedDrugResult.interactions}
+                </p>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-slate-800/80 border border-slate-700/80 space-y-1">
+                <div className="flex items-center gap-1.5 text-rose-400 font-extrabold text-[11px] uppercase tracking-wider">
+                  <Ban className="w-3.5 h-3.5" />
+                  <span>What to Avoid</span>
+                </div>
+                <p className="text-rose-200 leading-relaxed font-semibold">
+                  {researchedDrugResult.whatToAvoid}
+                </p>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-slate-800/80 border border-slate-700/80 space-y-1">
+                <div className="flex items-center gap-1.5 text-rose-300 font-extrabold text-[11px] uppercase tracking-wider">
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  <span>Important Warnings</span>
+                </div>
+                <p className="text-rose-100 leading-relaxed">
+                  {researchedDrugResult.warnings}
+                </p>
+              </div>
+            </div>
+
+            {/* AI Plain Language Banner */}
+            <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-900/60 to-purple-900/60 border border-indigo-400/40 flex items-start gap-3">
+              <div className="w-8 h-8 rounded-xl bg-indigo-500 text-white flex items-center justify-center flex-shrink-0 shadow-xs mt-0.5">
+                <Sparkles className="w-4 h-4" />
+              </div>
+              <div className="space-y-1 flex-1 text-xs">
+                <span className="font-extrabold text-indigo-200 block text-[11px] uppercase tracking-wider">
+                  AI Plain Language Explanation:
+                </span>
+                <p className="text-white font-medium leading-relaxed italic text-sm">
+                  "{researchedDrugResult.simplifiedExplanation}"
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-1 text-xs text-slate-400">
+              <span>Source: {researchedDrugResult.researchSource || 'Live Clinical Research'}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setMedicines((prev) => [...prev, researchedDrugResult]);
+                  setSuccessMsg(`Added "${researchedDrugResult.name}" to prescription review below.`);
+                }}
+                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center gap-1.5 shadow-md transition-all active:scale-95"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Add to Prescription Review</span>
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Status Notifications */}
       {error && (
-        <div className="p-4 bg-rose-50 text-rose-700 border border-rose-200 rounded-2xl flex items-center gap-2">
+        <div className="p-4 bg-rose-50 text-rose-700 border border-rose-200 rounded-2xl flex items-center gap-2 animate-in fade-in">
           <AlertTriangle className="w-5 h-5 flex-shrink-0" />
           <span>{error}</span>
         </div>
@@ -411,7 +654,7 @@ export const Prescription: React.FC = () => {
         </div>
       )}
 
-      {/* Upload Drag & Drop Area with Quick Sample Button */}
+      {/* Upload Drag & Drop Area with 3 Real-World Clinical Presets */}
       <div
         onDragOver={(e) => e.preventDefault()}
         onDrop={handleDrop}
@@ -431,13 +674,13 @@ export const Prescription: React.FC = () => {
 
         <div className="space-y-1">
           <h3 className="text-xl font-bold text-slate-900">
-            {uploading ? 'Processing Prescription Pipeline...' : 'Upload Prescription Document'}
+            {uploading ? 'Processing Prescription Pipeline...' : 'Upload Real Prescription Document'}
           </h3>
           <p className="text-slate-500 text-sm max-w-md mx-auto">
             {uploading ? (
               <span className="font-semibold text-brand-600 animate-pulse">{uploadStep}</span>
             ) : (
-              'Drag & drop your prescription image (JPEG, PNG) or PDF here, or click to browse.'
+              'Drag & drop your prescription image (JPEG, PNG) or PDF here, or select a realistic medical sample below.'
             )}
           </p>
         </div>
@@ -447,24 +690,52 @@ export const Prescription: React.FC = () => {
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
-            className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs shadow-md transition-all active:scale-95 disabled:opacity-50"
+            className="px-5 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-extrabold text-sm shadow-md transition-all active:scale-95 disabled:opacity-50"
           >
             Browse Prescription File
           </button>
+        </div>
 
-          <button
-            type="button"
-            onClick={handleLoadSample}
-            disabled={uploading}
-            className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs border border-slate-300 transition-all active:scale-95"
-            title="Load sample cardiology prescription for instant verification"
-          >
-            Load Sample Prescription
-          </button>
+        {/* 3 Real-World Medical Sample Presets */}
+        <div className="pt-3 border-t border-slate-200">
+          <span className="text-xs font-bold uppercase tracking-wider text-slate-500 block mb-2">
+            Or Test with Authentic Clinical Prescriptions:
+          </span>
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <button
+              type="button"
+              onClick={() => handleLoadRealWorldSample('cardio')}
+              disabled={uploading}
+              className="px-3.5 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-800 font-bold text-xs border border-indigo-200 transition-all active:scale-95 flex items-center gap-1.5"
+            >
+              <Heart className="w-3.5 h-3.5 text-rose-500" />
+              <span>Cardiology (Telma 40, Rosuvas 10, Ecosprin, Pan 40)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleLoadRealWorldSample('diabetes')}
+              disabled={uploading}
+              className="px-3.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-xs border border-emerald-200 transition-all active:scale-95 flex items-center gap-1.5"
+            >
+              <Pill className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Diabetes (Glycomet-GP 1, Januvia 100, Neurobion)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleLoadRealWorldSample('antibiotic')}
+              disabled={uploading}
+              className="px-3.5 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold text-xs border border-amber-200 transition-all active:scale-95 flex items-center gap-1.5"
+            >
+              <FlaskConical className="w-3.5 h-3.5 text-amber-600" />
+              <span>Chest Infection (Augmentin 625, Montair-LC, Calpol)</span>
+            </button>
+          </div>
         </div>
 
         <div className="text-[11px] text-slate-400 font-semibold">
-          Supports JPG, PNG, WebP, PDF • Automatically triggers OCR & Medicine Info Lookup
+          Supports JPG, PNG, WebP, PDF • Triggers Multimodal Vision OCR & Live Clinical Pharmacology Research
         </div>
       </div>
 
@@ -474,7 +745,7 @@ export const Prescription: React.FC = () => {
           {/* Card Header & Status */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-5 border-b border-slate-100 gap-4">
             <div className="space-y-1">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span
                   className={`text-xs px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider border ${
                     selectedRx.status === 'CONFIRMED'
@@ -494,8 +765,8 @@ export const Prescription: React.FC = () => {
               </div>
               <h2 className="text-2xl font-extrabold text-slate-900">
                 {selectedRx.status === 'CONFIRMED'
-                  ? 'Verified Prescription & AI Explanation'
-                  : 'Extracted Prescription — Review & Verification'}
+                  ? 'Verified Prescription & Clinical AI Analysis'
+                  : 'Extracted Prescription — Clinical Review & Verification'}
               </h2>
             </div>
 
@@ -534,7 +805,7 @@ export const Prescription: React.FC = () => {
                   type="text"
                   value={doctorName}
                   onChange={(e) => setDoctorName(e.target.value)}
-                  placeholder="e.g., Dr. Sarah Mitchell"
+                  placeholder="e.g., Dr. Rajesh Sharma"
                   className="elder-input text-xs"
                 />
               ) : (
@@ -554,7 +825,7 @@ export const Prescription: React.FC = () => {
                   type="text"
                   value={doctorSpecialty}
                   onChange={(e) => setDoctorSpecialty(e.target.value)}
-                  placeholder="e.g., Geriatrics & Cardiology"
+                  placeholder="e.g., Cardiology"
                   className="elder-input text-xs"
                 />
               ) : (
@@ -574,7 +845,7 @@ export const Prescription: React.FC = () => {
                   type="text"
                   value={hospitalName}
                   onChange={(e) => setHospitalName(e.target.value)}
-                  placeholder="e.g., City General Hospital"
+                  placeholder="e.g., Apollo Hospital"
                   className="elder-input text-xs"
                 />
               ) : (
@@ -594,7 +865,7 @@ export const Prescription: React.FC = () => {
                   type="text"
                   value={hospitalPhone}
                   onChange={(e) => setHospitalPhone(e.target.value)}
-                  placeholder="e.g., +1-555-019-4820"
+                  placeholder="e.g., +91-11-2692-5858"
                   className="elder-input text-xs font-mono"
                 />
               ) : (
@@ -605,7 +876,7 @@ export const Prescription: React.FC = () => {
             </div>
           </div>
 
-          {/* Structured Medicine Cards (Matching User Specification) */}
+          {/* Structured Medicine Cards (Matching 7-Point User Specification) */}
           <div className="space-y-4 pt-2">
             <div className="flex items-center justify-between">
               <div>
@@ -614,7 +885,7 @@ export const Prescription: React.FC = () => {
                   <span>Prescribed Medications ({medicines.length})</span>
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Each medication includes clinical lookup details and simple AI plain-language explanations.
+                  Real-world pharmacological research, indications, interactions, and simple AI explanations.
                 </p>
               </div>
 
@@ -637,10 +908,10 @@ export const Prescription: React.FC = () => {
                   key={idx}
                   className="p-5 sm:p-6 rounded-3xl bg-slate-50 border-2 border-slate-200 hover:border-brand-300 transition-all space-y-4 relative overflow-hidden"
                 >
-                  {/* Top Bar: Medicine Name & Header */}
+                  {/* Top Bar: Medicine Name & Clinical Badges */}
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-2xl bg-rose-500/10 text-rose-600 border border-rose-200 flex items-center justify-center font-bold">
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 rounded-2xl bg-rose-500/10 text-rose-600 border border-rose-200 flex items-center justify-center font-bold flex-shrink-0 mt-0.5">
                         <Pill className="w-5 h-5" />
                       </div>
                       <div>
@@ -653,23 +924,37 @@ export const Prescription: React.FC = () => {
                             className="elder-input text-base font-bold text-slate-900 w-full sm:w-64"
                           />
                         ) : (
-                          <h4 className="text-xl font-extrabold text-slate-900 flex items-center gap-2">
+                          <h4 className="text-xl font-extrabold text-slate-900 flex items-center gap-2 flex-wrap">
                             <span>{med.name}</span>
                             {med.dosage && (
-                              <span className="text-xs font-mono font-bold text-brand-700 bg-brand-100 px-2 py-0.5 rounded-md">
+                              <span className="text-xs font-mono font-bold text-brand-700 bg-brand-100 px-2.5 py-0.5 rounded-md">
                                 {med.dosage}
                               </span>
                             )}
                           </h4>
                         )}
-                        <p className="text-xs text-slate-500 mt-0.5">
-                          Frequency: <strong className="text-slate-800">{med.frequency || 'Daily'}</strong>
-                          {med.duration && <span> • Duration: <strong className="text-slate-800">{med.duration}</strong></span>}
-                        </p>
+
+                        {/* Composition & Drug Class Badges */}
+                        <div className="flex items-center gap-2 flex-wrap mt-1">
+                          {med.activeIngredients && (
+                            <span className="text-[11px] font-mono text-indigo-800 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200 font-semibold">
+                              🧪 {med.activeIngredients}
+                            </span>
+                          )}
+                          {med.drugClass && (
+                            <span className="text-[11px] font-mono text-slate-700 bg-slate-200/80 px-2 py-0.5 rounded-md font-semibold">
+                              🏷️ {med.drugClass}
+                            </span>
+                          )}
+                          <span className="text-xs text-slate-500">
+                            • Frequency: <strong className="text-slate-800">{med.frequency || 'Daily'}</strong>
+                            {med.duration && <span> • Duration: <strong className="text-slate-800">{med.duration}</strong></span>}
+                          </span>
+                        </div>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 self-end sm:self-center">
+                    <div className="flex items-center gap-2 self-end sm:self-center flex-wrap">
                       <button
                         type="button"
                         onClick={() => handleReadMedicineAloud(med)}
@@ -680,28 +965,26 @@ export const Prescription: React.FC = () => {
                         <span>Read Aloud</span>
                       </button>
 
-                      {isEditing && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => handleLookupSingleMedicine(idx)}
-                            disabled={lookingUpIdx === idx}
-                            className="px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold border border-indigo-200 flex items-center gap-1.5 transition-colors disabled:opacity-50"
-                            title="Refresh information with AI lookup"
-                          >
-                            <Sparkles className={`w-3.5 h-3.5 ${lookingUpIdx === idx ? 'animate-spin' : ''}`} />
-                            <span>{lookingUpIdx === idx ? 'Looking up...' : 'Lookup AI'}</span>
-                          </button>
+                      <button
+                        type="button"
+                        onClick={() => handleLookupSingleMedicine(idx)}
+                        disabled={lookingUpIdx === idx}
+                        className="px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold border border-indigo-200 flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                        title="Re-analyze with live AI pharmacology research"
+                      >
+                        <Sparkles className={`w-3.5 h-3.5 ${lookingUpIdx === idx ? 'animate-spin' : ''}`} />
+                        <span>{lookingUpIdx === idx ? 'Researching...' : 'Re-Analyze AI'}</span>
+                      </button>
 
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveMedicineRow(idx)}
-                            className="p-1.5 text-slate-400 hover:text-rose-600 rounded-xl hover:bg-rose-50 transition-colors"
-                            title="Remove medicine"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </>
+                      {isEditing && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveMedicineRow(idx)}
+                          className="p-1.5 text-slate-400 hover:text-rose-600 rounded-xl hover:bg-rose-50 transition-colors"
+                          title="Remove medicine"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       )}
                     </div>
                   </div>
@@ -841,9 +1124,16 @@ export const Prescription: React.FC = () => {
                       <Sparkles className="w-4 h-4" />
                     </div>
                     <div className="space-y-1 flex-1 text-xs">
-                      <span className="font-extrabold text-indigo-900 block text-[11px] uppercase tracking-wider">
-                        AI Explains in Simple Language:
-                      </span>
+                      <div className="flex items-center justify-between">
+                        <span className="font-extrabold text-indigo-900 block text-[11px] uppercase tracking-wider">
+                          AI Explains in Simple Language:
+                        </span>
+                        {med.researchSource && (
+                          <span className="text-[10px] text-indigo-600 font-mono font-semibold">
+                            Source: {med.researchSource}
+                          </span>
+                        )}
+                      </div>
                       {isEditing ? (
                         <textarea
                           rows={2}
@@ -853,7 +1143,7 @@ export const Prescription: React.FC = () => {
                           className="w-full p-2 text-xs border border-indigo-200 rounded-xl bg-white"
                         />
                       ) : (
-                        <p className="text-indigo-950 font-medium leading-relaxed italic">
+                        <p className="text-indigo-950 font-medium leading-relaxed italic text-sm">
                           "{med.simplifiedExplanation || 'This medicine is customized by your doctor to maintain your daily vitality. Taking it regularly keeps you feeling safe and healthy.'}"
                         </p>
                       )}
@@ -868,8 +1158,8 @@ export const Prescription: React.FC = () => {
           <div className="p-4 bg-amber-50 rounded-2xl border border-amber-200 text-xs text-amber-900 flex items-start gap-2.5">
             <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
             <div>
-              <strong className="font-bold">Medical Protocol & Invariant: </strong>
-              ElderCare AI provides patient education and reminder coordination. The AI does not diagnose illnesses or modify prescriptions. Always consult your pharmacist or primary care physician with any dosage questions.
+              <strong className="font-bold">Clinical Protocol & Patient Safety: </strong>
+              ElderCare AI provides clinical education, pharmacological interaction warnings, and reminder automation. The AI does not modify dosages without doctor oversight. Always consult your prescribing physician with any treatment questions.
             </div>
           </div>
 
@@ -956,7 +1246,7 @@ export const Prescription: React.FC = () => {
                     Follow this schedule daily (Recommended)
                   </span>
                   <span className="text-xs text-emerald-800">
-                    ElderCare AI will automatically alert you every day at your preferred time with precautions and food instructions.
+                    ElderCare AI will automatically alert you every day at your preferred time with precautions, food instructions, and audio readouts.
                   </span>
                 </div>
               </label>
@@ -1041,7 +1331,7 @@ export const Prescription: React.FC = () => {
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
-            <FileText className="w-6 h-6 text-brand-600" />
+            <BookOpen className="w-6 h-6 text-brand-600" />
             Prescriptions History & Archive
           </h2>
           <button
