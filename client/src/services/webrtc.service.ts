@@ -3,7 +3,9 @@ import { io, Socket } from 'socket.io-client';
 export interface WebRTCCallOptions {
   callId: string;
   userId?: string;
+  video?: boolean;
   onRemoteStream?: (stream: MediaStream) => void;
+  onLocalStream?: (stream: MediaStream) => void;
   onAudioLevel?: (level: number) => void;
   onCallConnected?: () => void;
   onCallEnded?: () => void;
@@ -14,12 +16,16 @@ export class WebRTCService {
   private static socket: Socket | null = null;
   private static peerConnection: RTCPeerConnection | null = null;
   private static localStream: MediaStream | null = null;
+  private static remoteStream: MediaStream | null = null;
   private static remoteAudioElement: HTMLAudioElement | null = null;
   private static audioContext: AudioContext | null = null;
   private static analyser: AnalyserNode | null = null;
   private static animFrameId: number | null = null;
   private static isMicMuted: boolean = false;
+  private static isCameraOff: boolean = false;
   private static currentCallId: string | null = null;
+  private static onLocalStreamCallback: ((stream: MediaStream) => void) | null = null;
+  private static onRemoteStreamCallback: ((stream: MediaStream) => void) | null = null;
 
   private static readonly ICE_SERVERS: RTCConfiguration = {
     iceServers: [
@@ -52,25 +58,61 @@ export class WebRTCService {
   }
 
   /**
-   * Start an in-browser WebRTC audio call session
+   * Start an in-browser WebRTC audio/video call session (caller side)
    */
   public static async startCall(options: WebRTCCallOptions): Promise<MediaStream> {
     this.currentCallId = options.callId;
     this.isMicMuted = false;
+    this.onLocalStreamCallback = options.onLocalStream || null;
+    this.onRemoteStreamCallback = options.onRemoteStream || null;
 
-    // 1. Capture microphone audio stream
+    // 1. Capture media stream (audio + optional video)
     try {
-      this.localStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-        video: false,
-      });
+      if (options.video !== false) {
+        try {
+          this.localStream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+            },
+            video: {
+              facingMode: 'user',
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+            },
+          });
+          this.isCameraOff = false;
+        } catch (videoErr) {
+          console.warn('[WebRTCService] Camera unavailable or denied, falling back to audio only:', videoErr);
+          this.localStream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+            },
+            video: false,
+          });
+          this.isCameraOff = true;
+        }
+      } else {
+        this.localStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+          video: false,
+        });
+        this.isCameraOff = true;
+      }
     } catch (err: any) {
-      console.error('[WebRTCService] Microphone access error:', err);
-      throw new Error('Microphone permission required to place an in-browser audio call.');
+      console.error('[WebRTCService] Media access error:', err);
+      throw new Error('Microphone permission required to place an in-browser call.');
+    }
+
+    if (this.onLocalStreamCallback && this.localStream) {
+      this.onLocalStreamCallback(this.localStream);
     }
 
     // 2. Setup real-time audio volume visualizer
@@ -79,19 +121,24 @@ export class WebRTCService {
     // 3. Initialize RTCPeerConnection
     this.peerConnection = new RTCPeerConnection(this.ICE_SERVERS);
 
-    // Add local audio tracks to peer connection
+    // Add local tracks (audio + video) to peer connection
     this.localStream.getTracks().forEach((track) => {
       if (this.peerConnection && this.localStream) {
         this.peerConnection.addTrack(track, this.localStream);
       }
     });
 
-    // 4. Setup remote audio receiver
+    // 4. Setup remote media receiver
     this.peerConnection.ontrack = (event) => {
-      console.log('[WebRTCService] Remote audio track received!');
-      const remoteStream = event.streams[0];
+      console.log(`[WebRTCService] Remote track received: ${event.track.kind}`);
+      const remoteStream = event.streams[0] || new MediaStream([event.track]);
+      this.remoteStream = remoteStream;
+
       if (options.onCallConnected) {
         options.onCallConnected();
+      }
+      if (this.onRemoteStreamCallback) {
+        this.onRemoteStreamCallback(remoteStream);
       }
       if (options.onRemoteStream) {
         options.onRemoteStream(remoteStream);
@@ -99,7 +146,7 @@ export class WebRTCService {
       this.playRemoteStream(remoteStream);
     };
 
-    // Monitor connection state (e.g. when receiver closes browser or loses connection)
+    // Monitor connection state
     this.peerConnection.onconnectionstatechange = () => {
       const state = this.peerConnection?.connectionState;
       console.log(`[WebRTCService] Connection state changed: ${state}`);
@@ -133,9 +180,9 @@ export class WebRTCService {
     socket.off('webrtc-hangup');
     socket.off('webrtc-peer-joined');
 
-    // When the other person (caregiver guest) joins the room, send an offer immediately
+    // When the receiver joins the room, send an offer immediately
     socket.on('webrtc-peer-joined', async () => {
-      console.log('[WebRTCService] Caregiver joined room! Initiating audio offer...');
+      console.log('[WebRTCService] Caregiver joined room! Initiating SDP offer...');
       if (options.onCallConnected) {
         options.onCallConnected();
       }
@@ -207,7 +254,7 @@ export class WebRTCService {
         sdp: offer,
       });
     } catch (e) {
-      console.warn('[WebRTCService] Notice creating offer:', e);
+      console.warn('[WebRTCService] Notice creating initial offer:', e);
     }
 
     return this.localStream;
@@ -219,20 +266,56 @@ export class WebRTCService {
   public static async joinCall(options: WebRTCCallOptions): Promise<MediaStream> {
     this.currentCallId = options.callId;
     this.isMicMuted = false;
+    this.onLocalStreamCallback = options.onLocalStream || null;
+    this.onRemoteStreamCallback = options.onRemoteStream || null;
 
-    // 1. Capture microphone audio stream
+    // 1. Capture media stream (audio + optional video)
     try {
-      this.localStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-        video: false,
-      });
+      if (options.video !== false) {
+        try {
+          this.localStream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+            },
+            video: {
+              facingMode: 'user',
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+            },
+          });
+          this.isCameraOff = false;
+        } catch (videoErr) {
+          console.warn('[WebRTCService] Camera unavailable or denied on guest device, falling back to audio only:', videoErr);
+          this.localStream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+            },
+            video: false,
+          });
+          this.isCameraOff = true;
+        }
+      } else {
+        this.localStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+          video: false,
+        });
+        this.isCameraOff = true;
+      }
     } catch (err: any) {
       console.error('[WebRTCService] Microphone access error:', err);
-      throw new Error('Microphone permission is required to join the audio call.');
+      throw new Error('Microphone permission is required to join the call.');
+    }
+
+    if (this.onLocalStreamCallback && this.localStream) {
+      this.onLocalStreamCallback(this.localStream);
     }
 
     // 2. Setup real-time audio volume visualizer
@@ -247,12 +330,20 @@ export class WebRTCService {
       }
     });
 
-    // 4. Setup remote audio playback
+    // 4. Setup remote media playback
     this.peerConnection.ontrack = (event) => {
-      console.log('[WebRTCService] Connected! Playing remote audio from patient...');
-      const remoteStream = event.streams[0];
+      console.log(`[WebRTCService] Connected! Remote track received: ${event.track.kind}`);
+      const remoteStream = event.streams[0] || new MediaStream([event.track]);
+      this.remoteStream = remoteStream;
+
+      if (this.onRemoteStreamCallback) {
+        this.onRemoteStreamCallback(remoteStream);
+      }
       if (options.onRemoteStream) {
         options.onRemoteStream(remoteStream);
+      }
+      if (options.onCallConnected) {
+        options.onCallConnected();
       }
       this.playRemoteStream(remoteStream);
     };
@@ -296,6 +387,9 @@ export class WebRTCService {
           sdp: answer,
         });
         console.log('[WebRTCService] Answer sent to caller successfully');
+        if (options.onCallConnected) {
+          options.onCallConnected();
+        }
       } catch (e) {
         console.error('[WebRTCService] Error answering offer:', e);
       }
@@ -323,6 +417,35 @@ export class WebRTCService {
     });
 
     return this.localStream;
+  }
+
+  /**
+   * Helper to attach media stream to a HTMLVideoElement
+   */
+  public static attachVideo(element: HTMLVideoElement | null, stream: MediaStream | null) {
+    if (!element) return;
+    if (element.srcObject !== stream) {
+      element.srcObject = stream;
+      if (stream) {
+        element.play().catch((err) => {
+          console.warn('[WebRTCService] Video autoplay notice:', err.message);
+        });
+      }
+    }
+  }
+
+  /**
+   * Get active local media stream
+   */
+  public static getLocalStream(): MediaStream | null {
+    return this.localStream;
+  }
+
+  /**
+   * Get active remote media stream
+   */
+  public static getRemoteStream(): MediaStream | null {
+    return this.remoteStream;
   }
 
   /**
@@ -392,6 +515,60 @@ export class WebRTCService {
   }
 
   /**
+   * Toggle camera video on / off
+   */
+  public static async toggleCamera(): Promise<boolean> {
+    if (!this.localStream) return false;
+    const videoTrack = this.localStream.getVideoTracks()[0];
+
+    if (videoTrack) {
+      this.isCameraOff = !this.isCameraOff;
+      videoTrack.enabled = !this.isCameraOff;
+      return !this.isCameraOff;
+    }
+
+    // If call started as audio-only, acquire camera and renegotiate
+    try {
+      const camStream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: 'user',
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+      });
+      const newVideoTrack = camStream.getVideoTracks()[0];
+      if (newVideoTrack) {
+        this.localStream.addTrack(newVideoTrack);
+        if (this.peerConnection) {
+          this.peerConnection.addTrack(newVideoTrack, this.localStream);
+          if (this.socket && this.currentCallId) {
+            const offer = await this.peerConnection.createOffer();
+            await this.peerConnection.setLocalDescription(offer);
+            this.socket.emit('webrtc-offer', {
+              callId: this.currentCallId,
+              sdp: offer,
+            });
+          }
+        }
+        this.isCameraOff = false;
+        if (this.onLocalStreamCallback) {
+          this.onLocalStreamCallback(this.localStream);
+        }
+        return true;
+      }
+    } catch (err) {
+      console.warn('[WebRTCService] Camera acquisition notice:', err);
+    }
+    return false;
+  }
+
+  public static isCameraActive(): boolean {
+    if (!this.localStream) return false;
+    const videoTrack = this.localStream.getVideoTracks()[0];
+    return !!videoTrack && videoTrack.enabled && !this.isCameraOff;
+  }
+
+  /**
    * End current WebRTC call and cleanup resources
    */
   public static endCall() {
@@ -414,6 +591,8 @@ export class WebRTCService {
       this.localStream = null;
     }
 
+    this.remoteStream = null;
+
     if (this.peerConnection) {
       this.peerConnection.close();
       this.peerConnection = null;
@@ -427,6 +606,9 @@ export class WebRTCService {
 
     this.currentCallId = null;
     this.isMicMuted = false;
+    this.isCameraOff = false;
+    this.onLocalStreamCallback = null;
+    this.onRemoteStreamCallback = null;
     console.log('[WebRTCService] Cleaned up all WebRTC media & connection resources');
   }
 }

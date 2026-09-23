@@ -7,6 +7,7 @@ export interface SendCallLinkSmsOptions {
   callerName: string;
   callId: string;
   clientUrl?: string;
+  callType?: 'VOICE' | 'VIDEO';
 }
 
 export interface SmsDispatchResult {
@@ -45,8 +46,11 @@ export class SmsService {
     const clientBase = options.clientUrl || activeTunnel || env.CLOUDFLARE_TUNNEL_URL || env.CLIENT_URL || 'http://localhost:5173';
     const joinUrl = `${clientBase.replace(/\/$/, '')}/call/join/${options.callId}`;
     const caller = options.callerName || 'Your loved one';
+    const isVideo = options.callType === 'VIDEO';
 
-    const messageText = `ElderCare AI Alert: ${caller} is calling you. Tap link to join audio call now: ${joinUrl}`;
+    const messageText = isVideo
+      ? `ElderCare AI Alert: ${caller} is calling you on Video/Audio. Tap link to join live call: ${joinUrl}`
+      : `ElderCare AI Alert: ${caller} is calling you (Audio/Video). Tap link to join call now: ${joinUrl}`;
 
     // 1. Live Fast2SMS Gateway (when FAST2SMS_API_KEY is configured)
     if (env.FAST2SMS_API_KEY && env.FAST2SMS_API_KEY.trim().length > 0) {

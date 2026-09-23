@@ -27,6 +27,8 @@ import {
   Smartphone,
   Send,
   ExternalLink,
+  Video,
+  VideoOff,
 } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { WebRTCService } from '../services/webrtc.service';
@@ -78,7 +80,16 @@ export const Calls: React.FC = () => {
   const [callDuration, setCallDuration] = useState(0);
   const [isDialing, setIsDialing] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [isVideoCall, setIsVideoCall] = useState(true);
+  const [isCameraActive, setIsCameraActive] = useState(true);
+  const [hasRemoteVideo, setHasRemoteVideo] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+
+  // Video element and stream refs
+  const localVideoRef = useRef<HTMLVideoElement | null>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const remoteStreamRef = useRef<MediaStream | null>(null);
 
   // Hospital form & AI calling state
   const [hospitalName, setHospitalName] = useState('Metropolitan Community Health Center');
@@ -187,9 +198,31 @@ export const Calls: React.FC = () => {
     };
   }, [activeCall]);
 
+  // Attach local video stream when element mounts
+  useEffect(() => {
+    if (localVideoRef.current && localStreamRef.current) {
+      WebRTCService.attachVideo(localVideoRef.current, localStreamRef.current);
+    }
+  }, [activeCall, isCameraActive]);
+
+  // Attach remote video stream when element mounts or stream updates
+  useEffect(() => {
+    if (remoteVideoRef.current && remoteStreamRef.current) {
+      WebRTCService.attachVideo(remoteVideoRef.current, remoteStreamRef.current);
+    }
+  }, [activeCall, hasRemoteVideo]);
+
   const handleToggleMute = () => {
     const muted = WebRTCService.toggleMute();
     setIsMuted(muted);
+  };
+
+  const handleToggleCamera = async () => {
+    const active = await WebRTCService.toggleCamera();
+    setIsCameraActive(active);
+    if (localVideoRef.current && localStreamRef.current) {
+      WebRTCService.attachVideo(localVideoRef.current, localStreamRef.current);
+    }
   };
 
   const getMobileJoinUrl = (callId: string) => {
@@ -209,7 +242,7 @@ export const Calls: React.FC = () => {
     const url = getMobileJoinUrl(call._id);
     const cleanPhone = (call.phoneNumber || '').replace(/[^0-9]/g, '');
     const text = encodeURIComponent(
-      `Urgent Call: Your elder parent (${call.contactName}) is calling you on ElderCare AI. Tap here to join the audio call immediately: ${url}`
+      `Urgent Call: Your elder parent (${call.contactName}) is calling you on ElderCare AI. Tap here to join the audio/video call immediately: ${url}`
     );
     const waUrl = cleanPhone
       ? `https://wa.me/${cleanPhone}?text=${text}`
@@ -256,9 +289,10 @@ export const Calls: React.FC = () => {
     }
   };
 
-  const handleStartCaregiverCall = async (contact: EmergencyContact) => {
+  const handleStartCaregiverCall = async (contact: EmergencyContact, withVideo: boolean = true) => {
     try {
       setIsDialing(true);
+      setIsVideoCall(withVideo);
       setError(null);
 
       // Start realistic phone ringing tone through browser speakers
@@ -269,6 +303,7 @@ export const Calls: React.FC = () => {
         contactId: contact._id,
         relationship: contact.relationship,
         name: contact.name,
+        callType: withVideo ? 'VIDEO' : 'VOICE',
       });
 
       // Display active calling banner in CALLING state while waiting for caregiver to tap SMS link
@@ -283,10 +318,26 @@ export const Calls: React.FC = () => {
         `📲 SMS dispatched to ${contact.name} (${contact.phone}) via Fast2SMS! Waiting for them to tap the link and join...`
       );
 
-      // Initialize in-browser WebRTC audio stream using call._id (matching the link in SMS)
-      await WebRTCService.startCall({
+      // Initialize in-browser WebRTC audio & video stream
+      const localStream = await WebRTCService.startCall({
         callId: call._id,
         userId: 'patient',
+        video: withVideo,
+        onLocalStream: (stream) => {
+          localStreamRef.current = stream;
+          if (localVideoRef.current) {
+            WebRTCService.attachVideo(localVideoRef.current, stream);
+          }
+          setIsCameraActive(stream.getVideoTracks().length > 0 && stream.getVideoTracks()[0].enabled);
+        },
+        onRemoteStream: (stream) => {
+          remoteStreamRef.current = stream;
+          const hasVideo = stream.getVideoTracks().length > 0;
+          setHasRemoteVideo(hasVideo);
+          if (remoteVideoRef.current) {
+            WebRTCService.attachVideo(remoteVideoRef.current, stream);
+          }
+        },
         onCallConnected: () => {
           // Stop ringing immediately when caregiver joins
           if (ringHandleRef.current) {
@@ -295,7 +346,7 @@ export const Calls: React.FC = () => {
           }
           playReminderChime();
           setActiveCall((prev) => (prev ? { ...prev, status: 'CONNECTED' } : null));
-          setSuccessMsg(`🎉 ${contact.name} joined the audio call! You can speak now.`);
+          setSuccessMsg(`🎉 ${contact.name} joined the call! You can speak and see each other.`);
         },
         onCallEnded: () => {
           if (ringHandleRef.current) {
@@ -305,10 +356,16 @@ export const Calls: React.FC = () => {
           playHangupTone();
           WebRTCService.endCall();
           setActiveCall(null);
+          setHasRemoteVideo(false);
+          localStreamRef.current = null;
+          remoteStreamRef.current = null;
           setSuccessMsg(`Call ended by ${contact.name}.`);
           fetchData();
         },
       });
+
+      localStreamRef.current = localStream;
+      setIsCameraActive(localStream.getVideoTracks().length > 0 && localStream.getVideoTracks()[0].enabled);
 
       await fetchData();
     } catch (err: any) {
@@ -317,7 +374,7 @@ export const Calls: React.FC = () => {
         ringHandleRef.current = null;
       }
       WebRTCService.endCall();
-      const msg = err.response?.data?.error?.message || err.message || 'Failed to initiate audio call';
+      const msg = err.response?.data?.error?.message || err.message || 'Failed to initiate call';
       setError(msg);
     } finally {
       setIsDialing(false);
@@ -336,6 +393,9 @@ export const Calls: React.FC = () => {
       await hangupCall(activeCall._id);
       setActiveCall(null);
       setIsMuted(false);
+      setHasRemoteVideo(false);
+      localStreamRef.current = null;
+      remoteStreamRef.current = null;
       await fetchData();
     } catch (err: any) {
       setError(err.response?.data?.error?.message || err.message || 'Failed to end call');
@@ -713,25 +773,35 @@ export const Calls: React.FC = () => {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 relative z-10">
             <div className="flex items-center gap-4">
               <div className="w-16 h-16 rounded-3xl bg-white/20 backdrop-blur-md flex items-center justify-center text-white shadow-inner animate-pulse">
-                <PhoneCall className="w-8 h-8 text-emerald-200" />
+                {isVideoCall ? (
+                  <Video className="w-8 h-8 text-emerald-200" />
+                ) : (
+                  <PhoneCall className="w-8 h-8 text-emerald-200" />
+                )}
               </div>
 
               <div className="space-y-1">
                 <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/20 text-xs font-bold uppercase tracking-wider text-emerald-200">
                   <Radio className="w-3.5 h-3.5 animate-pulse" />
-                  <span>Call {activeCall.status}</span>
+                  <span>
+                    {activeCall.status === 'CONNECTED'
+                      ? isVideoCall
+                        ? 'Live Video Call'
+                        : 'Live Audio Call'
+                      : `Calling (${activeCall.status})`}
+                  </span>
                 </div>
                 <h2 className="text-2xl sm:text-3xl font-extrabold text-white">
                   {activeCall.contactName} ({activeCall.relationship})
                 </h2>
                 <p className="text-sky-100 text-sm font-mono">
-                  Line: {activeCall.phoneNumber} • Type: {activeCall.type}
+                  Line: {activeCall.phoneNumber} • Engine: WebRTC Full-Duplex
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-3 sm:gap-4 self-end sm:self-center">
-              <div className="text-right">
+            <div className="flex items-center gap-3 sm:gap-4 self-end sm:self-center flex-wrap">
+              <div className="text-right mr-2">
                 <span className="text-xs uppercase tracking-wider text-emerald-200 block font-bold">
                   Duration
                 </span>
@@ -754,6 +824,21 @@ export const Calls: React.FC = () => {
                 <span>{isMuted ? 'Muted' : 'Mute'}</span>
               </button>
 
+              {/* Camera On / Off */}
+              <button
+                onClick={handleToggleCamera}
+                className={`px-4 py-3.5 rounded-2xl font-bold text-sm flex items-center gap-1.5 transition-transform active:scale-95 shadow-md ${
+                  !isCameraActive
+                    ? 'bg-amber-400 hover:bg-amber-500 text-slate-900 shadow-amber-900/30'
+                    : 'bg-white/20 hover:bg-white/30 text-white border border-white/30'
+                }`}
+                title={isCameraActive ? 'Turn off camera' : 'Turn on camera'}
+              >
+                {isCameraActive ? <Video className="w-5 h-5" /> : <VideoOff className="w-5 h-5 text-slate-900" />}
+                <span>{isCameraActive ? 'Camera On' : 'Camera Off'}</span>
+              </button>
+
+              {/* End Call Button */}
               <button
                 onClick={handleEndCall}
                 className="px-6 py-3.5 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-sm sm:text-base shadow-lg shadow-rose-900/30 flex items-center gap-2 transition-transform active:scale-95"
@@ -764,19 +849,80 @@ export const Calls: React.FC = () => {
             </div>
           </div>
 
+          {/* Interactive HD Video Stage */}
+          <div className="mt-6 w-full aspect-video max-h-[460px] rounded-3xl overflow-hidden relative bg-slate-950 border border-white/20 shadow-2xl flex items-center justify-center">
+            {/* Remote Caregiver Video Feed */}
+            <video
+              ref={remoteVideoRef}
+              autoPlay
+              playsInline
+              className={`w-full h-full object-cover transition-opacity duration-300 ${
+                hasRemoteVideo ? 'opacity-100' : 'opacity-0 absolute pointer-events-none'
+              }`}
+            />
+
+            {/* Remote Audio/Camera-off Fallback */}
+            {!hasRemoteVideo && (
+              <div className="flex flex-col items-center justify-center text-center p-6 space-y-3 z-10">
+                <div className="relative w-24 h-24 rounded-full bg-gradient-to-tr from-brand-600 via-teal-600 to-indigo-600 flex items-center justify-center text-white text-3xl font-black shadow-2xl border-4 border-white/20">
+                  {activeCall.contactName?.charAt(0) || 'C'}
+                  <span className="absolute inset-0 rounded-full border-2 border-emerald-400 animate-ping opacity-30" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-white">
+                    {activeCall.contactName} ({activeCall.relationship})
+                  </h3>
+                  <p className="text-xs text-emerald-200 mt-0.5">
+                    Audio stream active • Video will stream when caregiver joins or turns on camera
+                  </p>
+                </div>
+                <VoiceWaveform state={isMuted ? 'idle' : 'speaking'} />
+              </div>
+            )}
+
+            {/* Floating Elder Selfie PiP (Bottom-Right) */}
+            <div className="absolute bottom-4 right-4 z-20 w-32 sm:w-44 aspect-[4/3] rounded-2xl overflow-hidden border-2 border-white/40 shadow-2xl bg-slate-900 flex items-center justify-center">
+              <video
+                ref={localVideoRef}
+                autoPlay
+                playsInline
+                muted
+                style={{ transform: 'scaleX(-1)' }}
+                className={`w-full h-full object-cover ${
+                  isCameraActive ? 'opacity-100' : 'opacity-0 absolute pointer-events-none'
+                }`}
+              />
+              {!isCameraActive && (
+                <div className="flex flex-col items-center justify-center text-center p-2 text-slate-400">
+                  <User className="w-6 h-6 mb-1 text-slate-500" />
+                  <span className="text-[10px] font-bold">Your Camera Off</span>
+                </div>
+              )}
+              <span className="absolute bottom-1.5 left-2 px-1.5 py-0.5 rounded-md bg-black/70 text-[9px] font-bold text-white tracking-wider">
+                You (Laptop)
+              </span>
+            </div>
+
+            {/* In-Video Status Pill */}
+            <div className="absolute top-4 left-4 z-20 flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-md border border-white/20 text-xs font-bold text-white shadow-lg">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+              <span>{hasRemoteVideo ? 'Caregiver HD Video' : 'Audio Connected'}</span>
+            </div>
+          </div>
+
           {/* Live In-Call Audio Waveform & Status */}
-          <div className="mt-5 pt-4 border-t border-white/15 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div className="mt-4 pt-4 border-t border-white/15 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
             <div className="flex items-center gap-3">
               <VoiceWaveform state={isMuted ? 'idle' : 'speaking'} />
               <span className="font-semibold text-emerald-100">
                 {isMuted
                   ? 'Microphone muted • Click "Muted" to speak'
-                  : 'WebRTC In-Browser Audio Active • Speaking via Laptop Mic & Speakers'}
+                  : 'WebRTC In-Browser Audio & Video Active • Speaking via Laptop Mic & Speakers'}
               </span>
             </div>
             <div className="flex items-center gap-2 text-sky-200/80">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span>Full-Duplex Device VoIP</span>
+              <span>Peer-to-Peer STUN VoIP</span>
             </div>
           </div>
 
@@ -915,18 +1061,27 @@ export const Calls: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="pt-6 border-t border-slate-100 mt-4">
+                    <div className="pt-5 border-t border-slate-100 mt-4 space-y-2">
                       <button
-                        onClick={() => handleStartCaregiverCall(contact)}
+                        onClick={() => handleStartCaregiverCall(contact, true)}
                         disabled={isDialing || !!activeCall}
-                        className={`w-full py-3.5 px-4 rounded-2xl font-extrabold text-base flex items-center justify-center gap-2 transition-all active:scale-95 shadow-md ${
+                        className={`w-full py-3.5 px-4 rounded-2xl font-extrabold text-base flex items-center justify-center gap-2.5 transition-all active:scale-95 shadow-md ${
                           contact.isPrimary
                             ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/25'
                             : 'bg-brand-600 hover:bg-brand-700 text-white shadow-brand-600/25'
                         } disabled:opacity-50`}
                       >
-                        <Phone className="w-5 h-5" />
-                        <span>Call {contact.name.split(' ')[0]}</span>
+                        <Video className="w-5 h-5" />
+                        <span>Video Call {contact.name.split(' ')[0]}</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleStartCaregiverCall(contact, false)}
+                        disabled={isDialing || !!activeCall}
+                        className="w-full py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 text-slate-700 hover:bg-slate-100 border border-slate-200 transition-all active:scale-95 disabled:opacity-50"
+                      >
+                        <Phone className="w-3.5 h-3.5 text-slate-500" />
+                        <span>Voice Call Only</span>
                       </button>
                     </div>
                   </div>

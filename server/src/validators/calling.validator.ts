@@ -5,6 +5,7 @@ export const initiateCaregiverCallSchema = z.object({
   relationship: z.string().trim().optional(),
   name: z.string().trim().optional(),
   message: z.string().trim().optional(),
+  callType: z.enum(['VOICE', 'VIDEO']).optional(),
 });
 
 export const updateCallStatusSchema = z.object({

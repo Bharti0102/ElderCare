@@ -180,6 +180,7 @@ export interface InitiateCallDTO {
   relationship?: string;
   name?: string;
   message?: string;
+  callType?: 'VOICE' | 'VIDEO';
 }
 
 export type AppointmentStatus =

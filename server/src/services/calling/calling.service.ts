@@ -51,6 +51,7 @@ export class CallingService {
       recipientName: contact.name,
       callerName: (user as any)?.name || 'Mom / Dad',
       callId: call._id.toString(),
+      callType: input?.callType,
     }).catch((err) => {
       console.warn('[CallingService] Notice dispatching automated SMS:', err.message);
     });
