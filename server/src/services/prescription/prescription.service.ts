@@ -9,10 +9,12 @@ import {
 } from '../../validators/prescription.validator';
 import { AppError } from '../../utils/apiError';
 import { ReminderRepeat } from '../../models/Reminder';
+import { MedicineLookupService } from './medicine-lookup.service';
 
 export class PrescriptionService {
   /**
    * Process uploaded prescription file through OCR and save initial analyzed record.
+   * Step: Upload -> OCR / Vision -> Extract medicines -> Medicine information lookup -> AI explains in simple language
    */
   public static async uploadAndAnalyze(
     userId: string,
@@ -22,12 +24,16 @@ export class PrescriptionService {
       throw new AppError('No prescription file uploaded', 400, 'FILE_MISSING');
     }
 
+    // 1. OCR / Vision extraction
     const ocrProvider = OCRFactory.getProvider();
     const extracted = await ocrProvider.extractPrescription(
       file.path,
       file.mimetype,
       file.originalname
     );
+
+    // 2. Medicine information lookup & AI simple language explanation
+    const enrichedMedicines = await MedicineLookupService.enrichMedicines(extracted.medicines);
 
     const relativeUrl = `/uploads/prescriptions/${file.filename}`;
 
@@ -41,7 +47,7 @@ export class PrescriptionService {
       hospital: extracted.hospital,
       receptionPhone: extracted.receptionPhone,
       prescriptionDate: extracted.prescriptionDate || new Date(),
-      medicines: extracted.medicines,
+      medicines: enrichedMedicines,
       rawText: extracted.rawText,
       confidence: extracted.confidence,
       status: 'ANALYZED',
@@ -99,7 +105,10 @@ export class PrescriptionService {
     if (input.prescriptionDate) {
       prescription.prescriptionDate = new Date(input.prescriptionDate);
     }
-    prescription.medicines = input.medicines;
+
+    // Ensure any edited or new medicine rows are enriched with lookup details
+    const enriched = await MedicineLookupService.enrichMedicines(input.medicines);
+    prescription.medicines = enriched;
     prescription.status = 'CONFIRMED';
 
     await prescription.save();
@@ -108,6 +117,7 @@ export class PrescriptionService {
 
   /**
    * Bridge confirmed prescription medicines into scheduled reminders in ReminderService.
+   * Creates automatic daily reminder with detailed explanation: why it is prescribed, how it works, what to avoid, precautions.
    */
   public static async bridgeToReminders(
     userId: string,
@@ -157,26 +167,53 @@ export class PrescriptionService {
         scheduledAt.setDate(scheduledAt.getDate() + 1);
       }
 
-      // Detect repeat rule
+      // Automatically confirm whether to follow daily (default to daily unless specified)
       let repeat: ReminderRepeat = 'daily';
-      const freq = (med.frequency || '').toLowerCase();
-      if (freq.includes('week')) {
-        repeat = 'weekly';
-      } else if (freq.includes('month')) {
-        repeat = 'monthly';
-      } else if (freq.includes('once') && !freq.includes('daily')) {
-        repeat = 'none';
+      if (options?.confirmDaily === false) {
+        const freq = (med.frequency || '').toLowerCase();
+        if (freq.includes('week')) {
+          repeat = 'weekly';
+        } else if (freq.includes('month')) {
+          repeat = 'monthly';
+        } else if (freq.includes('once') && !freq.includes('daily')) {
+          repeat = 'none';
+        }
       }
 
-      const title = med.dosage ? `${med.name} (${med.dosage})` : med.name;
-      const descParts = [];
-      if (med.instructions) descParts.push(med.instructions);
-      if (med.frequency) descParts.push(`Sig: ${med.frequency}`);
-      if (prescription.doctor?.name) descParts.push(`Prescribed by: ${prescription.doctor.name}`);
+      const title = med.dosage ? `Take ${med.name} (${med.dosage})` : `Take ${med.name}`;
+
+      // Build rich, senior-accessible description covering all 7 clinical aspects
+      const descLines: string[] = [];
+      if (med.purpose) {
+        descLines.push(`🩺 Why prescribed: ${med.purpose}`);
+      }
+      if (med.timingInstructions || med.instructions) {
+        descLines.push(`⏰ How to take: ${med.timingInstructions || med.instructions}`);
+      }
+      if (med.whatToAvoid) {
+        descLines.push(`🚫 What to avoid: ${med.whatToAvoid}`);
+      }
+      if (med.precautions) {
+        descLines.push(`🛡️ Precautions: ${med.precautions}`);
+      }
+      if (med.interactions) {
+        descLines.push(`🥗 Food/Drug Interactions: ${med.interactions}`);
+      }
+      if (med.warnings) {
+        descLines.push(`⚠️ Warnings: ${med.warnings}`);
+      }
+      if (med.simplifiedExplanation) {
+        descLines.push(`💡 Simple Guide: ${med.simplifiedExplanation}`);
+      }
+      if (prescription.doctor?.name) {
+        descLines.push(`👨‍⚕️ Prescribed by: ${prescription.doctor.name}`);
+      }
+
+      const description = descLines.join('\n\n') || med.instructions || 'Prescribed medication';
 
       const reminder = await ReminderService.createReminder(userId, {
         title,
-        description: descParts.join(' | ') || 'Prescribed medication',
+        description,
         category: 'MEDICATION',
         scheduledAt,
         repeat,

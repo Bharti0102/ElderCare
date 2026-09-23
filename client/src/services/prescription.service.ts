@@ -83,3 +83,18 @@ export const deletePrescription = async (id: string): Promise<void> => {
     throw new Error(response.data.error?.message || 'Failed to delete prescription');
   }
 };
+
+export const lookupMedicine = async (data: {
+  name: string;
+  dosage?: string;
+  instructions?: string;
+}): Promise<any> => {
+  const response = await api.post<ApiResponse<{ details: any }>>(
+    '/prescriptions/lookup-medicine',
+    data
+  );
+  if (response.data.success && response.data.data) {
+    return response.data.data.details;
+  }
+  throw new Error(response.data.error?.message || 'Failed to lookup medicine details');
+};

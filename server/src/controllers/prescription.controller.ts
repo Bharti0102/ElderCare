@@ -1,6 +1,7 @@
 import { Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from '../types/auth';
 import { PrescriptionService } from '../services/prescription/prescription.service';
+import { MedicineLookupService } from '../services/prescription/medicine-lookup.service';
 import {
   confirmPrescriptionSchema,
   createRemindersFromPrescriptionSchema,
@@ -9,6 +10,27 @@ import { sendSuccess } from '../utils/apiResponse';
 import { AppError } from '../utils/apiError';
 
 export class PrescriptionController {
+  public static async lookupMedicine(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const { name, dosage, instructions } = req.body;
+      if (!name) {
+        throw new AppError('Medicine name is required for information lookup', 400, 'NAME_REQUIRED');
+      }
+      const details = await MedicineLookupService.enrichMedicine({
+        name,
+        dosage,
+        instructions,
+      });
+      sendSuccess(res, { details }, 'Medicine information lookup completed');
+    } catch (error) {
+      next(error);
+    }
+  }
+
   public static async uploadAndAnalyze(
     req: AuthenticatedRequest,
     res: Response,

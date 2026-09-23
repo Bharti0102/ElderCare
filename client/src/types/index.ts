@@ -102,6 +102,13 @@ export interface PrescriptionMedicine {
   frequency?: string;
   instructions?: string;
   duration?: string;
+  purpose?: string;            // Why it is prescribed
+  timingInstructions?: string; // When/how to take it
+  precautions?: string;        // Common precautions
+  interactions?: string;       // Food/drug interactions
+  whatToAvoid?: string;        // What to avoid
+  warnings?: string;           // Important warnings
+  simplifiedExplanation?: string; // AI explains in simple language
 }
 
 export interface Prescription {
@@ -146,6 +153,7 @@ export interface ConfirmPrescriptionDTO {
 export interface CreateRemindersFromPrescriptionDTO {
   medicineIndices?: number[];
   preferredTime?: string;
+  confirmDaily?: boolean;
 }
 
 export type CallType = 'CAREGIVER' | 'HOSPITAL';

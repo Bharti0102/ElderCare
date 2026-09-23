@@ -6,6 +6,13 @@ export const medicineValidator = z.object({
   frequency: z.string().trim().optional(),
   instructions: z.string().trim().optional(),
   duration: z.string().trim().optional(),
+  purpose: z.string().trim().optional(),
+  timingInstructions: z.string().trim().optional(),
+  precautions: z.string().trim().optional(),
+  interactions: z.string().trim().optional(),
+  whatToAvoid: z.string().trim().optional(),
+  warnings: z.string().trim().optional(),
+  simplifiedExplanation: z.string().trim().optional(),
 });
 
 export const confirmPrescriptionSchema = z.object({
@@ -33,6 +40,7 @@ export const confirmPrescriptionSchema = z.object({
 export const createRemindersFromPrescriptionSchema = z.object({
   medicineIndices: z.array(z.number().int().nonnegative()).optional(),
   preferredTime: z.string().regex(/^\d{1,2}:\d{2}$/, 'Time must be in HH:mm format').optional(),
+  confirmDaily: z.boolean().optional(),
 });
 
 export type ConfirmPrescriptionInput = z.infer<typeof confirmPrescriptionSchema>;

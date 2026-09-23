@@ -8,6 +8,13 @@ export interface IPrescriptionMedicine {
   frequency?: string;
   instructions?: string;
   duration?: string;
+  purpose?: string;            // Why it is prescribed
+  timingInstructions?: string; // When/how to take it
+  precautions?: string;        // Common precautions
+  interactions?: string;       // Food/drug interactions
+  whatToAvoid?: string;        // What to avoid
+  warnings?: string;           // Important warnings
+  simplifiedExplanation?: string; // AI explains in simple language
 }
 
 export interface IPrescription extends Document {
@@ -54,6 +61,34 @@ const PrescriptionMedicineSchema = new Schema<IPrescriptionMedicine>(
       trim: true,
     },
     duration: {
+      type: String,
+      trim: true,
+    },
+    purpose: {
+      type: String,
+      trim: true,
+    },
+    timingInstructions: {
+      type: String,
+      trim: true,
+    },
+    precautions: {
+      type: String,
+      trim: true,
+    },
+    interactions: {
+      type: String,
+      trim: true,
+    },
+    whatToAvoid: {
+      type: String,
+      trim: true,
+    },
+    warnings: {
+      type: String,
+      trim: true,
+    },
+    simplifiedExplanation: {
       type: String,
       trim: true,
     },

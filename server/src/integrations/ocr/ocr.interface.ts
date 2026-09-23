@@ -4,6 +4,13 @@ export interface ExtractedMedicine {
   frequency?: string;
   instructions?: string;
   duration?: string;
+  purpose?: string;
+  timingInstructions?: string;
+  precautions?: string;
+  interactions?: string;
+  whatToAvoid?: string;
+  warnings?: string;
+  simplifiedExplanation?: string;
 }
 
 export interface ExtractedPrescriptionData {

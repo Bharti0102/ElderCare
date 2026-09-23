@@ -11,6 +11,9 @@ router.use(authenticate);
 // Multipart upload & analyze
 router.post('/upload', prescriptionUpload.single('file'), PrescriptionController.uploadAndAnalyze);
 
+// Medicine information lookup & AI simple language explanation
+router.post('/lookup-medicine', PrescriptionController.lookupMedicine);
+
 // Prescription CRUD & Bridging
 router.get('/', PrescriptionController.getPrescriptions);
 router.get('/:id', PrescriptionController.getPrescriptionById);
