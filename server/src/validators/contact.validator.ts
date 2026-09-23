@@ -14,7 +14,7 @@ export const createContactSchema = z.object({
   phone: z
     .string({ required_error: 'Phone number is required' })
     .trim()
-    .min(7, 'Phone number must be at least 7 characters long')
+    .min(3, 'Phone number must be at least 3 digits long')
     .max(25, 'Phone number cannot exceed 25 characters'),
   isPrimary: z.boolean().optional().default(false),
 });
@@ -35,7 +35,7 @@ export const updateContactSchema = z.object({
   phone: z
     .string()
     .trim()
-    .min(7, 'Phone number must be at least 7 characters long')
+    .min(3, 'Phone number must be at least 3 digits long')
     .max(25, 'Phone number cannot exceed 25 characters')
     .optional(),
   isPrimary: z.boolean().optional(),

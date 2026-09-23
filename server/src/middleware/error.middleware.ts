@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction, ErrorRequestHandler } from 'express';
+import { ZodError } from 'zod';
 import { AppError } from '../utils/apiError';
 import { sendError } from '../utils/apiResponse';
 import { env } from '../config/env';
@@ -12,6 +13,13 @@ export const errorHandler: ErrorRequestHandler = (
 ): void => {
   if (err instanceof AppError) {
     sendError(res, err.message, err.statusCode, err.code, err.details);
+    return;
+  }
+
+  // Handle Zod validation errors
+  if (err instanceof ZodError) {
+    const errorMsg = err.errors.map((e) => e.message).join('. ');
+    sendError(res, errorMsg || 'Validation Error', 400, 'VALIDATION_ERROR', err.format());
     return;
   }
 

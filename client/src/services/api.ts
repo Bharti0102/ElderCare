@@ -10,6 +10,20 @@ const api: AxiosInstance = axios.create({
   withCredentials: true,
 });
 
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const customMessage =
+      error.response?.data?.error?.message ||
+      error.response?.data?.message ||
+      error.message;
+    if (customMessage) {
+      error.message = customMessage;
+    }
+    return Promise.reject(error);
+  }
+);
+
 export const getHealthStatus = async (): Promise<HealthData> => {
   const response = await api.get<ApiResponse<HealthData>>('/health');
   if (response.data && response.data.success && response.data.data) {
