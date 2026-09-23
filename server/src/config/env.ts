@@ -15,6 +15,9 @@ const envSchema = z.object({
   LLM_PROVIDER: z.enum(['mock', 'gemini', 'openai']).default('mock'),
   GEMINI_API_KEY: z.string().optional().default(''),
   OPENAI_API_KEY: z.string().optional().default(''),
+  TWILIO_ACCOUNT_SID: z.string().optional().default(''),
+  TWILIO_AUTH_TOKEN: z.string().optional().default(''),
+  TWILIO_PHONE_NUMBER: z.string().optional().default(''),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);

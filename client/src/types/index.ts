@@ -147,3 +147,37 @@ export interface CreateRemindersFromPrescriptionDTO {
   medicineIndices?: number[];
   preferredTime?: string;
 }
+
+export type CallType = 'CAREGIVER' | 'HOSPITAL';
+export type CallStatus =
+  | 'REQUESTED'
+  | 'CALLING'
+  | 'CONNECTED'
+  | 'COMPLETED'
+  | 'FAILED'
+  | 'CANCELLED';
+
+export interface Call {
+  _id: string;
+  userId: string;
+  contactId?: string;
+  contactName: string;
+  relationship: string;
+  phoneNumber: string;
+  type: CallType;
+  providerCallId: string;
+  status: CallStatus;
+  startedAt: string;
+  endedAt?: string;
+  durationSeconds: number;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface InitiateCallDTO {
+  contactId?: string;
+  relationship?: string;
+  name?: string;
+  message?: string;
+}

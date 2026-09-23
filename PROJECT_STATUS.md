@@ -1,6 +1,6 @@
 # ElderCare AI — Project Status
 
-## Overall Status: Phase 4 Completed
+## Overall Status: Phase 5 Completed
 
 | Phase | Description | Status | Completion Date |
 |-------|-------------|--------|-----------------|
@@ -9,10 +9,25 @@
 | **Phase 2** | AI Orchestrator + Companion | **Completed** | 2026-09-23 |
 | **Phase 3** | Reminder Agent (Natural Language Reminders, Scheduler) | **Completed** | 2026-09-23 |
 | **Phase 4** | Prescription Intelligence (Upload, OCR/Vision, Validation) | **Completed** | 2026-09-23 |
-| **Phase 5** | Caregiver Calling (Calling Tool, Twilio/Provider Integration) | **Next in Queue** | — |
-| **Phase 6** | Hospital Calling + Appointment Assistance | Planned | — |
+| **Phase 5** | Caregiver Calling (Calling Tool, Telephony Abstraction) | **Completed** | 2026-09-23 |
+| **Phase 6** | Hospital Calling + Appointment Assistance | **Next in Queue** | — |
 | **Phase 7** | Voice Pipeline (STT, TTS, Voice-first interaction) | Planned | — |
 | **Phase 8** | Integration, Accessibility & Final Polish | Planned | — |
+
+---
+
+## Phase 5 Checklist
+- [x] Call Mongoose model (`Call.ts`) recording `userId`, `contactId`, `contactName`, `relationship`, `phoneNumber`, `type`, `status`, `startedAt`, `endedAt`, `durationSeconds`, and `notes`
+- [x] Clean Telephony Abstraction layer (`ITelephonyProvider`) with `MockTelephonyProvider` and production `TwilioTelephonyProvider`
+- [x] Strict Telephony Safety Invariant: never hardcode phone numbers, never invent numbers; all calls resolve authenticated user's emergency contacts
+- [x] Caregiver resolution service (`caregiver.service.ts`) resolving contacts by relationship, name, or primary caregiver fallback
+- [x] Calling service (`calling.service.ts`) managing call creation, status transitions, call hangup/termination, and history log
+- [x] AI Tool (`calling.tool.ts`) integrated into `OrchestratorService` responding to natural voice/chat commands (e.g., *"Call my daughter"*, *"Call my doctor"*)
+- [x] Unverified Contact Protection: AI gracefully rejects calling unverified people and instructs the user to configure contacts in Profile
+- [x] Authenticated REST endpoints: `POST /api/calls/caregiver`, `GET /api/calls`, `GET /api/calls/:id`, `PATCH /api/calls/:id/status`, `POST /api/calls/:id/hangup`
+- [x] Elderly-accessible frontend `Calls.tsx` with single-click caregiver quick dial cards, in-call overlay with live duration timer, and call history
+- [x] Comprehensive automated E2E test suite passing 25/25 assertions with 100% pass rate
+- [x] Zero regressions across Phase 1, Phase 2, Phase 3, and Phase 4 test suites
 
 ---
 

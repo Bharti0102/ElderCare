@@ -36,26 +36,7 @@ export class MockLLMProvider implements LLMProvider {
       };
     }
 
-    // 1. Call Caregiver Intent
-    if (
-      text.includes('call') &&
-      (text.includes('daughter') ||
-        text.includes('son') ||
-        text.includes('caregiver') ||
-        text.includes('emergency') ||
-        text.includes('family') ||
-        text.includes('sarah') ||
-        text.includes('doctor')) &&
-      !text.includes('hospital')
-    ) {
-      return {
-        intent: 'CALL_CAREGIVER',
-        confidence: 0.95,
-        reasoning: 'User requested calling family caregiver or emergency contact',
-      };
-    }
-
-    // 2. Hospital / Appointment Intent
+    // 1. Hospital / Appointment Intent
     if (
       text.includes('hospital') ||
       text.includes('reception') ||
@@ -66,6 +47,23 @@ export class MockLLMProvider implements LLMProvider {
         intent: 'HOSPITAL_CALL',
         confidence: 0.92,
         reasoning: 'User mentioned hospital contact or doctor appointment booking',
+      };
+    }
+
+    // 2. Call Caregiver / Emergency Contact Intent
+    if (
+      (text.startsWith('call ') ||
+        text.includes(' call ') ||
+        text.includes('call my ') ||
+        text.includes('dial ') ||
+        text.includes('ring ') ||
+        text.includes('phone ')) &&
+      !text.includes('what should i call')
+    ) {
+      return {
+        intent: 'CALL_CAREGIVER',
+        confidence: 0.95,
+        reasoning: 'User requested calling a caregiver or emergency contact',
       };
     }
 

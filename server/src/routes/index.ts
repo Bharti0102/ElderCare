@@ -6,6 +6,7 @@ import agentRoutes from './agent.routes';
 import chatRoutes from './chat.routes';
 import reminderRoutes from './reminder.routes';
 import prescriptionRoutes from './prescription.routes';
+import callingRoutes from './calling.routes';
 
 const router = Router();
 
@@ -17,5 +18,6 @@ router.use('/agent', agentRoutes);
 router.use('/chat', chatRoutes);
 router.use('/reminders', reminderRoutes);
 router.use('/prescriptions', prescriptionRoutes);
+router.use('/calls', callingRoutes);
 
 export default router;

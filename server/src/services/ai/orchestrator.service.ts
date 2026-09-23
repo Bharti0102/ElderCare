@@ -2,6 +2,7 @@ import { LLMService } from './llm.service';
 import { ChatTool } from './tools/chat.tool';
 import { ReminderTool } from './tools/reminder.tool';
 import { PrescriptionTool } from './tools/prescription.tool';
+import { CallingTool } from './tools/calling.tool';
 import { ChatService } from '../chat/chat.service';
 import { KnownIntent } from '../../integrations/llm/llm.interface';
 
@@ -17,6 +18,7 @@ export class OrchestratorService {
   private static chatTool = new ChatTool();
   private static reminderTool = new ReminderTool();
   private static prescriptionTool = new PrescriptionTool();
+  private static callingTool = new CallingTool();
 
   public static async processMessage(
     userId: string,
@@ -60,15 +62,15 @@ export class OrchestratorService {
       }
 
       case 'CALL_CAREGIVER': {
-        const previewReply =
-          '📞 I recognized your request to contact your family caregiver. Voice telephony calling will be activated in Phase 5. In the meantime, you can manage your verified primary contacts in your Profile!';
         await ChatService.addMessage(userId, 'user', trimmedInput, 'CALL_CAREGIVER');
-        await ChatService.addMessage(userId, 'assistant', previewReply, 'CALL_CAREGIVER');
+        const toolResult = await this.callingTool.execute(userId, { message: trimmedInput });
+        await ChatService.addMessage(userId, 'assistant', toolResult.message, 'CALL_CAREGIVER');
         return {
-          reply: previewReply,
+          reply: toolResult.message,
           intent: 'CALL_CAREGIVER',
           confidence: intentResult.confidence,
-          suggestions: ['View emergency contacts in Profile', 'Tell me a calming story', 'Who is my daughter?'],
+          toolResults: [toolResult],
+          suggestions: toolResult.suggestions || ['View Calls tab', 'Tell me a calming story', 'Who is my daughter?'],
         };
       }
 
