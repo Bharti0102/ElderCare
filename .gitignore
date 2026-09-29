@@ -12,10 +12,16 @@ build/
 
 # Environment files
 .env
+.env*
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
+.env.example
+
+# Exclude README
+README.md
+README*.md
 
 # Logs
 *.log
@@ -30,3 +36,7 @@ Thumbs.db
 uploads/
 temp/
 scratch/
+
+# Secrets & Large Binary Assets
+.vapid_keys.json
+*.traineddata

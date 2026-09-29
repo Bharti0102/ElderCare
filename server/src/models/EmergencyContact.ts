@@ -1,9 +1,12 @@
 import { Schema, model, Document, Types } from 'mongoose';
 
+export type ContactCategory = 'FAMILY' | 'CAREGIVER' | 'DOCTOR' | 'EMERGENCY';
+
 export interface IEmergencyContact extends Document {
   userId: Types.ObjectId;
   name: string;
   relationship: string;
+  category: ContactCategory;
   phone: string;
   isPrimary: boolean;
   createdAt: Date;
@@ -31,6 +34,12 @@ const emergencyContactSchema = new Schema<IEmergencyContact>(
       trim: true,
       maxlength: [50, 'Relationship cannot exceed 50 characters'],
     },
+    category: {
+      type: String,
+      enum: ['FAMILY', 'CAREGIVER', 'DOCTOR', 'EMERGENCY'],
+      default: 'FAMILY',
+      index: true,
+    },
     phone: {
       type: String,
       required: [true, 'Phone number is required'],
@@ -47,6 +56,7 @@ const emergencyContactSchema = new Schema<IEmergencyContact>(
 );
 
 // Compound index for user scoping
-emergencyContactSchema.index({ userId: 1, isPrimary: -1 });
+emergencyContactSchema.index({ userId: 1, category: 1, isPrimary: -1 });
 
 export const EmergencyContact = model<IEmergencyContact>('EmergencyContact', emergencyContactSchema);
+

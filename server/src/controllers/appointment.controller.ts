@@ -4,6 +4,8 @@ import {
   initiateHospitalCallSchema,
   confirmAppointmentSchema,
   cancelAppointmentSchema,
+  saveReceptionSchema,
+  createDirectAppointmentSchema,
 } from '../validators/appointment.validator';
 import { sendSuccess } from '../utils/apiResponse';
 import { AuthenticatedRequest } from '../types/auth';
@@ -58,6 +60,20 @@ export class AppointmentController {
     try {
       const appointment = await HospitalService.getAppointmentById(req.user!.id, String(req.params.id));
       sendSuccess(res, { appointment }, 'Appointment retrieved successfully');
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  public static async createDirect(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const validatedInput = createDirectAppointmentSchema.parse(req.body);
+      const appointment = await HospitalService.createDirectAppointment(req.user!.id, validatedInput);
+      sendSuccess(res, { appointment }, 'Appointment booked successfully', 201);
     } catch (err) {
       next(err);
     }
@@ -125,4 +141,65 @@ export class AppointmentController {
       next(err);
     }
   }
+
+  // --- Saved Clinic & Reception Desks ---
+
+  public static async listReceptions(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const receptions = await HospitalService.getReceptions(req.user!.id);
+      sendSuccess(res, { receptions }, 'Saved receptions retrieved successfully');
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  public static async createReception(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const validatedInput = saveReceptionSchema.parse(req.body);
+      const reception = await HospitalService.createReception(req.user!.id, validatedInput);
+      sendSuccess(res, { reception }, 'Reception contact saved successfully', 201);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  public static async updateReception(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const validatedInput = saveReceptionSchema.partial().parse(req.body);
+      const reception = await HospitalService.updateReception(
+        req.user!.id,
+        String(req.params.id),
+        validatedInput
+      );
+      sendSuccess(res, { reception }, 'Reception contact updated successfully');
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  public static async deleteReception(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      await HospitalService.deleteReception(req.user!.id, String(req.params.id));
+      sendSuccess(res, null, 'Reception contact removed successfully');
+    } catch (err) {
+      next(err);
+    }
+  }
 }
+

@@ -27,6 +27,7 @@ export class ContactService {
       userId: userObjectId,
       name: input.name,
       relationship: input.relationship,
+      category: input.category || 'FAMILY',
       phone: input.phone,
       isPrimary: shouldBePrimary,
     });
@@ -34,9 +35,13 @@ export class ContactService {
     return contact;
   }
 
-  public static async getContacts(userId: string): Promise<IEmergencyContact[]> {
+  public static async getContacts(userId: string, category?: string): Promise<IEmergencyContact[]> {
     const userObjectId = new Types.ObjectId(userId);
-    return EmergencyContact.find({ userId: userObjectId })
+    const filter: any = { userId: userObjectId };
+    if (category) {
+      filter.category = category;
+    }
+    return EmergencyContact.find(filter)
       .sort({ isPrimary: -1, createdAt: -1 })
       .exec();
   }
@@ -78,11 +83,13 @@ export class ContactService {
 
     if (input.name !== undefined) contact.name = input.name;
     if (input.relationship !== undefined) contact.relationship = input.relationship;
+    if (input.category !== undefined) contact.category = input.category;
     if (input.phone !== undefined) contact.phone = input.phone;
     if (input.isPrimary !== undefined) contact.isPrimary = input.isPrimary;
 
     await contact.save();
     return contact;
+
   }
 
   public static async deleteContact(

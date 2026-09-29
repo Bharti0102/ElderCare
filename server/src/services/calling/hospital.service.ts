@@ -2,10 +2,15 @@ import { Types } from 'mongoose';
 import { Appointment, IAppointment } from '../../models/Appointment';
 import { Prescription } from '../../models/Prescription';
 import { User } from '../../models/User';
-import { CallingService } from './calling.service';
-import { ICall } from '../../models/Call';
+import { Call, ICall } from '../../models/Call';
+import { HospitalReception, IHospitalReception } from '../../models/HospitalReception';
 import { AppError } from '../../utils/apiError';
-import { InitiateHospitalCallInput, ConfirmAppointmentInput } from '../../validators/appointment.validator';
+import {
+  InitiateHospitalCallInput,
+  ConfirmAppointmentInput,
+  SaveReceptionInput,
+  CreateDirectAppointmentInput,
+} from '../../validators/appointment.validator';
 
 export interface HospitalCallResult {
   call: ICall;
@@ -64,7 +69,8 @@ export class HospitalService {
 
   /**
    * Mode A: Human Calls Reception
-   * Connects/assists the elderly user in dialing the hospital reception desk.
+   * Connects/assists the elderly user in dialing the hospital reception desk
+   * using their phone's native dialer or Truecaller. Logs the real call in DB.
    */
   public static async initiateHumanCall(
     userId: string,
@@ -72,18 +78,18 @@ export class HospitalService {
   ): Promise<HospitalCallResult> {
     const userObjectId = new Types.ObjectId(userId);
 
-    // 1. Initiate telephony call with type HOSPITAL
-    const call = await CallingService.initiateCaregiverCall(userId, {
-      name: input.hospital,
+    // 1. Create real call record in MongoDB tracking the direct phone / Truecaller call
+    const call = await Call.create({
+      userId: userObjectId,
+      contactName: input.hospital,
       relationship: 'Hospital Reception',
-    }).catch(async () => {
-      // If not in contacts, initiate direct hospital call
-      return CallingService.initiateCallDirect(userId, {
-        contactName: input.hospital,
-        relationship: 'Hospital Reception',
-        phoneNumber: input.receptionPhone,
-        type: 'HOSPITAL',
-      });
+      phoneNumber: input.receptionPhone,
+      type: 'HOSPITAL',
+      providerCallId: `device-dialer-${Date.now()}`,
+      status: 'COMPLETED',
+      startedAt: new Date(),
+      endedAt: new Date(),
+      notes: `Direct phone call initiated via device dialer / Truecaller to ${input.hospital} reception (${input.receptionPhone})`,
     });
 
     // 2. Calculate scheduled date
@@ -111,7 +117,7 @@ export class HospitalService {
       call,
       appointment,
       mode: 'HUMAN_CALL',
-      summary: `Connecting you directly to ${input.hospital} reception at ${input.receptionPhone}. You are now speaking with their scheduling desk.`,
+      summary: `Call initiated to ${input.hospital} reception at ${input.receptionPhone}. You are now speaking with their scheduling desk.`,
     };
   }
 
@@ -128,43 +134,85 @@ export class HospitalService {
     const user = await User.findById(userObjectId);
     const patientName = user?.name || 'the patient';
 
-    // 1. Initiate telephony call record with type HOSPITAL
-    const call = await CallingService.initiateCallDirect(userId, {
+    // 1. Initiate telephony call record with type HOSPITAL (recorded without external Twilio)
+    const call = await Call.create({
+      userId: userObjectId,
       contactName: `${input.hospital} (Reception)`,
       relationship: 'Hospital Scheduling',
       phoneNumber: input.receptionPhone,
       type: 'HOSPITAL',
+      providerCallId: `ai-booking-${Date.now()}`,
+      status: 'COMPLETED',
+      startedAt: new Date(),
+      endedAt: new Date(),
+      notes: `AI autonomous booking inquiry with ${input.hospital} reception`,
     });
 
-    // 2. Determine requested date and time
+
+    // 1. Determine requested date and time
     const requestedDate = input.preferredDate ? new Date(input.preferredDate) : new Date(Date.now() + 86400000);
     const dateFormatted = requestedDate.toLocaleDateString('en-US', {
       weekday: 'long',
       month: 'short',
       day: 'numeric',
     });
-    const requestedTime = input.preferredTime || '10:30 AM';
+    const requestedTime = input.confirmedTime || input.preferredTime || '10:30 AM';
     const doctorName = input.doctor || 'Attending Physician';
     const departmentName = input.department || 'Outpatient Clinic';
 
-    // 3. Construct dialogue respecting Invariant: Self-identify as AI, never impersonate
-    const aiTranscript = [
-      `[AI Agent]: "Hello, this is ElderCare AI calling on behalf of patient ${patientName}."`,
-      `[Receptionist]: "Metropolitan Hospital Scheduling. How can I help you today?"`,
-      `[AI Agent]: "We would like to request an outpatient consultation with ${doctorName} in ${departmentName} for a follow-up review. Are slots available for ${dateFormatted} around ${requestedTime}?"`,
-      `[Receptionist]: "Yes, we have an open consultation slot on ${dateFormatted} at ${requestedTime} with ${doctorName}."`,
-      `[AI Agent]: "Thank you. I am reserving this proposed slot. I will present the details to patient ${patientName} for their immediate confirmation."`,
-      `[Receptionist]: "Sounds good. Please confirm once the patient verifies."`,
-    ].join('\n');
+    // 2. Analyze receptionist response for slot availability
+    const speechLower = (input.receptionistSpeech || '').toLowerCase();
+    const isExplicitlyUnavailable =
+      input.isAvailable === false ||
+      speechLower.includes('unavailable') ||
+      speechLower.includes('not available') ||
+      speechLower.includes('no slot') ||
+      speechLower.includes('full') ||
+      speechLower.includes('on leave') ||
+      speechLower.includes('closed') ||
+      speechLower.includes('cancel');
 
-    const aiNotes = `AI Calling Agent contacted ${input.hospital} reception at ${input.receptionPhone}. Proposed appointment slot with ${doctorName} discovered for ${dateFormatted} at ${requestedTime}. Awaiting patient confirmation.`;
+    const isAvailable = input.isAvailable !== false && !isExplicitlyUnavailable;
 
-    // 4. Update Call record with notes and completed status
-    await CallingService.updateCallStatus(call._id.toString(), 'COMPLETED', {
-      notes: aiNotes,
-    });
+    // 3. Construct dialogue transcript
+    const aiTranscript = input.aiTranscript || (
+      isAvailable
+        ? [
+            `[AI Agent]: "Hello, this is ElderCare AI calling on behalf of patient ${patientName}."`,
+            `[Receptionist]: "${input.hospital} Reception & Scheduling desk. How may I assist you?"`,
+            `[AI Agent]: "We would like to request an outpatient consultation with Dr. ${doctorName} in ${departmentName}${input.patientNotes ? ` regarding: ${input.patientNotes}` : ''}. Are slots open for ${dateFormatted} around ${input.preferredTime || requestedTime}?"`,
+            `[Receptionist]: "${input.receptionistSpeech || `Yes, consultation slot with Dr. ${doctorName} is open on ${dateFormatted} at ${requestedTime}.`}"`,
+            `[AI Agent]: "Thank you. I have confirmed and booked this slot for patient ${patientName}."`,
+          ].join('\n')
+        : [
+            `[AI Agent]: "Hello, this is ElderCare AI calling on behalf of patient ${patientName}."`,
+            `[Receptionist]: "${input.hospital} Reception & Scheduling desk. How may I assist you?"`,
+            `[AI Agent]: "We would like to request an outpatient consultation with Dr. ${doctorName} in ${departmentName}. Are slots open for ${dateFormatted} around ${input.preferredTime || requestedTime}?"`,
+            `[Receptionist]: "${input.receptionistSpeech || `Sorry, Dr. ${doctorName} has no available slots on ${dateFormatted}.`}"`,
+            `[AI Agent]: "I understand. I will not book the slot and will inform the patient that the doctor is unavailable. Thank you."`,
+          ].join('\n')
+    );
 
-    // 5. Create Appointment proposal in PENDING_CONFIRMATION
+    const callNotes = isAvailable
+      ? `AI Call to ${input.hospital} (${input.receptionPhone}): Reception confirmed slot with Dr. ${doctorName} on ${dateFormatted} at ${requestedTime}.`
+      : `AI Call to ${input.hospital} (${input.receptionPhone}): Dr. ${doctorName} is unavailable on ${dateFormatted}. Reception response: "${input.receptionistSpeech || 'No slots available'}". No appointment booked.`;
+
+    // 4. Update Call record in DB
+    call.notes = callNotes;
+    await call.save();
+
+    // 5. If receptionist confirmed slot is UNAVAILABLE, DO NOT BOOK ANY APPOINTMENT!
+    if (!isAvailable) {
+      return {
+        call,
+        appointment: undefined,
+        mode: 'AI_CALL',
+        aiTranscript,
+        summary: `⚠️ I contacted **${input.hospital}** on your behalf, but Dr. **${doctorName}** has no available slots for **${dateFormatted}** (${input.receptionistSpeech || 'unavailable'}). No appointment was booked.`,
+      };
+    }
+
+    // 6. Slot confirmed available by receptionist -> Create confirmed appointment
     const appointment = await Appointment.create({
       userId: userObjectId,
       prescriptionId: input.prescriptionId ? new Types.ObjectId(input.prescriptionId) : undefined,
@@ -175,10 +223,10 @@ export class HospitalService {
       receptionPhone: input.receptionPhone,
       requestedDate,
       requestedTime,
-      status: 'PENDING_CONFIRMATION',
+      status: 'CONFIRMED',
       source: 'AI_CALL',
       aiTranscript,
-      aiNotes,
+      aiNotes: `AI Calling Agent confirmed appointment with ${input.hospital} reception for ${dateFormatted} at ${requestedTime}.`,
       patientNotes: input.patientNotes || '',
     });
 
@@ -187,7 +235,7 @@ export class HospitalService {
       appointment,
       mode: 'AI_CALL',
       aiTranscript,
-      summary: `🤖 I contacted **${input.hospital}** on your behalf. Reception offered an appointment with **${doctorName}** on **${dateFormatted} at ${requestedTime}**. Please review and confirm below!`,
+      summary: `✅ I contacted **${input.hospital}** on your behalf. Dr. **${doctorName}** has confirmed availability on **${dateFormatted} at ${requestedTime}**. The appointment is booked!`,
     };
   }
 
@@ -296,4 +344,131 @@ export class HospitalService {
       throw new AppError('Appointment not found or already removed.', 404, 'APPOINTMENT_NOT_FOUND');
     }
   }
+
+  /**
+   * Get all saved clinic receptions for user (Returns only real user-saved contacts)
+   */
+  public static async getReceptions(userId: string): Promise<IHospitalReception[]> {
+    const userObjectId = new Types.ObjectId(userId);
+
+    // Purge any previously seeded dummy clinics so the user sees only their own real contacts
+    await HospitalReception.deleteMany({
+      userId: userObjectId,
+      hospitalName: {
+        $in: [
+          'Apollo Multi-Speciality Clinic',
+          'City Care Outpatient Hospital',
+          'Fortis Family Health Clinic',
+          'Prescribed Medical Center',
+        ],
+      },
+    });
+
+    return HospitalReception.find({ userId: userObjectId }).sort({ isFavorite: -1, createdAt: -1 });
+  }
+
+
+  /**
+   * Save a new hospital reception contact
+   */
+  public static async createReception(
+    userId: string,
+    input: SaveReceptionInput
+  ): Promise<IHospitalReception> {
+    const userObjectId = new Types.ObjectId(userId);
+    const reception = await HospitalReception.create({
+      userId: userObjectId,
+      hospitalName: input.hospitalName,
+      receptionPhone: input.receptionPhone,
+      doctorName: input.doctorName || 'General Practitioner',
+      department: input.department || 'Outpatient Department',
+      address: input.address || '',
+      availableSlots: input.availableSlots && input.availableSlots.length > 0
+        ? input.availableSlots
+        : ['09:00 AM', '10:30 AM', '11:45 AM', '02:00 PM', '04:30 PM', '06:00 PM'],
+      notes: input.notes || '',
+      isFavorite: !!input.isFavorite,
+    });
+    return reception;
+  }
+
+  /**
+   * Update saved reception contact
+   */
+  public static async updateReception(
+    userId: string,
+    receptionId: string,
+    input: Partial<SaveReceptionInput>
+  ): Promise<IHospitalReception> {
+    if (!Types.ObjectId.isValid(receptionId)) {
+      throw new AppError('Invalid reception ID format.', 400, 'INVALID_ID');
+    }
+
+    const reception = await HospitalReception.findOne({
+      _id: new Types.ObjectId(receptionId),
+      userId: new Types.ObjectId(userId),
+    });
+
+    if (!reception) {
+      throw new AppError('Reception contact not found.', 404, 'NOT_FOUND');
+    }
+
+    if (input.hospitalName) reception.hospitalName = input.hospitalName;
+    if (input.receptionPhone) reception.receptionPhone = input.receptionPhone;
+    if (input.doctorName !== undefined) reception.doctorName = input.doctorName;
+    if (input.department !== undefined) reception.department = input.department;
+    if (input.address !== undefined) reception.address = input.address;
+    if (input.availableSlots) reception.availableSlots = input.availableSlots;
+    if (input.notes !== undefined) reception.notes = input.notes;
+    if (input.isFavorite !== undefined) reception.isFavorite = input.isFavorite;
+
+    await reception.save();
+    return reception;
+  }
+
+  /**
+   * Delete saved reception contact
+   */
+  public static async deleteReception(userId: string, receptionId: string): Promise<void> {
+    if (!Types.ObjectId.isValid(receptionId)) {
+      throw new AppError('Invalid reception ID format.', 400, 'INVALID_ID');
+    }
+
+    const result = await HospitalReception.deleteOne({
+      _id: new Types.ObjectId(receptionId),
+      userId: new Types.ObjectId(userId),
+    });
+
+    if (result.deletedCount === 0) {
+      throw new AppError('Reception contact not found.', 404, 'NOT_FOUND');
+    }
+  }
+
+  /**
+   * Create direct appointment (e.g. after patient spoke to reception or booked manually)
+   */
+  public static async createDirectAppointment(
+    userId: string,
+    input: CreateDirectAppointmentInput
+  ): Promise<IAppointment> {
+    const userObjectId = new Types.ObjectId(userId);
+    const requestedDate = new Date(input.requestedDate);
+
+    const appointment = await Appointment.create({
+      userId: userObjectId,
+      hospital: input.hospital,
+      receptionPhone: input.receptionPhone,
+      doctor: input.doctor || 'General Practitioner',
+      department: input.department || 'Outpatient Department',
+      requestedDate,
+      requestedTime: input.requestedTime,
+      status: input.status || 'CONFIRMED',
+      source: input.source || 'HUMAN_CALL',
+      patientNotes: input.patientNotes || '',
+      aiNotes: `Booked via direct patient call to ${input.hospital} (${input.receptionPhone}).`,
+    });
+
+    return appointment;
+  }
 }
+

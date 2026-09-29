@@ -10,6 +10,8 @@ import callingRoutes from './calling.routes';
 import appointmentRoutes from './appointment.routes';
 import speechRoutes from './speech.routes';
 import tunnelRoutes from './tunnel.routes';
+import aiConfigRoutes from './ai-config.routes';
+import notificationRoutes from './notification.routes';
 
 const router = Router();
 
@@ -25,5 +27,7 @@ router.use('/calls', callingRoutes);
 router.use('/appointments', appointmentRoutes);
 router.use('/voice', speechRoutes);
 router.use('/tunnel', tunnelRoutes);
+router.use('/settings/ai-config', aiConfigRoutes);
+router.use('/notifications', notificationRoutes);
 
 export default router;

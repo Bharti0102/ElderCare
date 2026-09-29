@@ -14,6 +14,8 @@ const envSchema = z.object({
   JWT_EXPIRES_IN: z.string().default('7d'),
   LLM_PROVIDER: z.enum(['mock', 'gemini', 'openai']).default('mock'),
   GEMINI_API_KEY: z.string().optional().default(''),
+  OPENAI_API_KEY: z.string().optional().default(''),
+  GROQ_API_KEY: z.string().optional().default(''),
   TELEPHONY_PROVIDER: z.enum(['webrtc', 'mock']).default('webrtc'),
   FAST2SMS_API_KEY: z.string().optional().default(''),
   CLOUDFLARE_TUNNEL_URL: z.string().optional().default(''),
@@ -21,6 +23,9 @@ const envSchema = z.object({
   TWILIO_ACCOUNT_SID: z.string().optional().default(''),
   TWILIO_AUTH_TOKEN: z.string().optional().default(''),
   TWILIO_PHONE_NUMBER: z.string().optional().default(''),
+  VAPID_PUBLIC_KEY: z.string().optional().default(''),
+  VAPID_PRIVATE_KEY: z.string().optional().default(''),
+  VAPID_SUBJECT: z.string().optional().default('mailto:support@eldercare.ai'),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);

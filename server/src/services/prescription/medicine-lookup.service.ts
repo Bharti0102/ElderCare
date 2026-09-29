@@ -1,4 +1,8 @@
+import fs from 'fs';
+import path from 'path';
 import { env } from '../../config/env';
+import { AIConfigService } from '../ai/ai-config.service';
+import { TesseractOCRProvider } from '../../integrations/ocr/tesseract.ocr';
 
 export interface EnrichedMedicineDetails {
   name: string;
@@ -34,10 +38,34 @@ export class MedicineLookupService {
       return this.generateSmartHeuristicDetails('Prescription Medication', raw.dosage, raw.instructions);
     }
 
-    // 1. Primary: Live Google Gemini AI Clinical Pharmacology Research
-    if (env.GEMINI_API_KEY) {
+    const groqKey = AIConfigService.getGroqKey();
+    const geminiKey = AIConfigService.getGeminiKey();
+    const openAIKey = AIConfigService.getOpenAIKey();
+
+    // 1. Primary: Groq LPU Ultra-Fast Pharmacology Research (Llama-3.3-70B)
+    if (groqKey) {
       try {
-        const aiResearch = await this.queryGeminiPharmacologyResearch(cleanName, raw.dosage, raw.instructions);
+        const groqResearch = await this.queryGroqPharmacologyResearch(cleanName, groqKey, raw.dosage, raw.instructions);
+        if (groqResearch) {
+          return {
+            name: cleanName,
+            dosage: raw.dosage || groqResearch.dosage || 'As prescribed',
+            frequency: raw.frequency || groqResearch.frequency || 'Daily',
+            instructions: raw.instructions || groqResearch.timingInstructions,
+            duration: raw.duration || 'As directed by physician',
+            ...groqResearch,
+            researchSource: 'Groq LPU Clinical Pharmacology Research (Llama-3.3-70B)',
+          };
+        }
+      } catch (err: any) {
+        console.warn(`[MedicineLookupService] Groq pharmacology research notice for ${cleanName}:`, err.message);
+      }
+    }
+
+    // 1b. Secondary: Live Google Gemini AI Clinical Pharmacology Research
+    if (geminiKey) {
+      try {
+        const aiResearch = await this.queryGeminiPharmacologyResearch(cleanName, geminiKey, raw.dosage, raw.instructions);
         if (aiResearch) {
           return {
             name: cleanName,
@@ -51,6 +79,26 @@ export class MedicineLookupService {
         }
       } catch (err: any) {
         console.warn(`[MedicineLookupService] Gemini pharmacology research notice for ${cleanName}:`, err.message);
+      }
+    }
+
+    // 1b. Secondary AI: OpenAI ChatGPT Clinical Pharmacology Research
+    if (openAIKey) {
+      try {
+        const openAIResearch = await this.queryOpenAIPharmacologyResearch(cleanName, openAIKey, raw.dosage, raw.instructions);
+        if (openAIResearch) {
+          return {
+            name: cleanName,
+            dosage: raw.dosage || openAIResearch.dosage || 'As prescribed',
+            frequency: raw.frequency || openAIResearch.frequency || 'Daily',
+            instructions: raw.instructions || openAIResearch.timingInstructions,
+            duration: raw.duration || 'As directed by physician',
+            ...openAIResearch,
+            researchSource: 'OpenAI ChatGPT Clinical Pharmacology Research',
+          };
+        }
+      } catch (err: any) {
+        console.warn(`[MedicineLookupService] OpenAI pharmacology research notice for ${cleanName}:`, err.message);
       }
     }
 
@@ -121,10 +169,11 @@ export class MedicineLookupService {
   }
 
   /**
-   * Live Gemini AI Clinical Pharmacology Research Engine
+   * Groq LPU Clinical Pharmacology Research Engine (Llama-3.3-70B)
    */
-  private static async queryGeminiPharmacologyResearch(
+  private static async queryGroqPharmacologyResearch(
     medicineName: string,
+    groqKey: string,
     dosage?: string,
     instructions?: string
   ): Promise<Omit<EnrichedMedicineDetails, 'name'> | null> {
@@ -161,7 +210,91 @@ Return ONLY valid JSON with this exact structure:
   "simplifiedExplanation": "A comforting, warm 1-2 sentence summary in simple, everyday language that an 80-year-old elder can easily understand"
 }`;
 
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${env.GEMINI_API_KEY}`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12000);
+
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${groqKey}`,
+      },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
+        temperature: 0.1,
+        max_tokens: 1500,
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    if (!res.ok) return null;
+    const data: any = await res.json();
+    const content = data.choices?.[0]?.message?.content;
+    if (!content) return null;
+
+    const parsed = JSON.parse(content);
+    return {
+      activeIngredients: parsed.activeIngredients || medicineName,
+      drugClass: parsed.drugClass || 'Therapeutic Medication',
+      dosage: parsed.dosage || dosage || 'As directed',
+      frequency: parsed.frequency || 'Daily',
+      duration: parsed.duration || 'Ongoing',
+      purpose: parsed.purpose || 'Prescribed by your physician for therapeutic maintenance.',
+      timingInstructions: parsed.timingInstructions || 'Take with water as directed by your physician.',
+      precautions: parsed.precautions || 'Take regularly at the same time each day.',
+      interactions: parsed.interactions || 'Check with your doctor before combining with new over-the-counter medications.',
+      whatToAvoid: parsed.whatToAvoid || 'Avoid alcohol and unverified dietary supplements.',
+      warnings: parsed.warnings || 'Contact your doctor immediately if you experience dizziness, rash, or persistent side effects.',
+      simplifiedExplanation: parsed.simplifiedExplanation || `This medicine helps keep your body healthy and balanced when taken as directed.`,
+    };
+  }
+
+  /**
+   * Live Gemini AI Clinical Pharmacology Research Engine
+   */
+  private static async queryGeminiPharmacologyResearch(
+    medicineName: string,
+    geminiKey: string,
+    dosage?: string,
+    instructions?: string
+  ): Promise<Omit<EnrichedMedicineDetails, 'name'> | null> {
+    const prompt = `You are a clinical pharmacologist and senior geriatric medicine specialist. Conduct real-world pharmacological analysis and patient education research for this medication:
+
+Medication / Brand: "${medicineName}"
+Dosage Specified: "${dosage || 'Standard clinical dose'}"
+Patient Instructions: "${instructions || 'As prescribed by physician'}"
+
+Perform rigorous clinical analysis:
+1. Identify the active generic chemical formulation/salts (e.g., for Augmentin: Amoxicillin + Clavulanate; for Telma-H: Telmisartan + Hydrochlorothiazide; for Glycomet: Metformin HCl).
+2. Determine exact therapeutic drug class.
+3. State why it is prescribed (precise therapeutic indication & mechanism of action).
+4. Provide exact administration timing instructions (with/after meals, morning/night, swallow whole, water requirements).
+5. Outline common geriatric precautions (orthostatic hypotension, dizziness, hydration, renal monitoring).
+6. Detail verified evidence-based Food & Drug interactions (grapefruit juice, dairy/calcium, alcohol, NSAIDs, potassium-rich foods, salt substitutes).
+7. List specific foods, drinks, and OTC products to avoid.
+8. State critical red-flag warnings / severe side effects requiring immediate doctor or emergency intervention.
+9. Write a compassionate, warm 1-2 sentence plain-language explanation an 80-year-old elder can easily understand.
+
+Return ONLY valid JSON with this exact structure:
+{
+  "activeIngredients": "Generic chemical composition (e.g. Telmisartan 40mg)",
+  "drugClass": "Pharmacological class (e.g. Angiotensin II Receptor Blocker - ARB)",
+  "dosage": "Recommended standard dosage",
+  "frequency": "Administration frequency (e.g. Once daily in the morning)",
+  "duration": "Typical duration (e.g. Ongoing / 30 days)",
+  "purpose": "Precise clinical indication explaining why the doctor prescribed this medication",
+  "timingInstructions": "Step-by-step instructions on when and how to take the medication safely",
+  "precautions": "Crucial safety precautions for elderly patients",
+  "interactions": "Known food and drug interactions (e.g. Grapefruit, Alcohol, NSAIDs)",
+  "whatToAvoid": "Specific foods, beverages, activities, or OTC drugs to avoid while on this medication",
+  "warnings": "Red-flag warning symptoms requiring immediate physician or emergency attention",
+  "simplifiedExplanation": "A comforting, warm 1-2 sentence summary in simple, everyday language that an 80-year-old elder can easily understand"
+}`;
+
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`;
     const res = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -193,6 +326,73 @@ Return ONLY valid JSON with this exact structure:
       interactions: parsed.interactions || 'Check with your doctor before combining with new over-the-counter medications.',
       whatToAvoid: parsed.whatToAvoid || 'Avoid alcohol and unverified dietary supplements.',
       warnings: parsed.warnings || 'Contact your doctor immediately if you experience dizziness, rash, or persistent side effects.',
+      simplifiedExplanation: parsed.simplifiedExplanation || `This medicine helps keep your body healthy and balanced when taken as directed.`,
+    };
+  }
+
+  /**
+   * OpenAI ChatGPT Clinical Pharmacology Research Engine
+   */
+  private static async queryOpenAIPharmacologyResearch(
+    medicineName: string,
+    openAIKey: string,
+    dosage?: string,
+    instructions?: string
+  ): Promise<Omit<EnrichedMedicineDetails, 'name'> | null> {
+    const prompt = `You are a clinical pharmacologist. Analyze this medication for geriatric patient education:
+Medication / Brand: "${medicineName}"
+Dosage: "${dosage || 'Standard'}"
+Instructions: "${instructions || 'As prescribed'}"
+
+Respond ONLY with valid JSON:
+{
+  "activeIngredients": "Generic chemical composition (e.g. Amoxicillin 500mg + Clavulanate 125mg)",
+  "drugClass": "Pharmacological class",
+  "dosage": "Standard dose",
+  "frequency": "Frequency",
+  "duration": "Duration",
+  "purpose": "Clear clinical indication why prescribed",
+  "timingInstructions": "Step-by-step instructions on when and how to take",
+  "precautions": "Crucial safety precautions for elderly patients",
+  "interactions": "Known food and drug interactions",
+  "whatToAvoid": "Foods, drinks, or OTC drugs to avoid",
+  "warnings": "Red-flag warning symptoms requiring emergency attention",
+  "simplifiedExplanation": "A comforting 1-2 sentence plain-language explanation for an 80-year-old senior"
+}`;
+
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${openAIKey}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
+        temperature: 0.1,
+      }),
+    });
+
+    if (!res.ok) return null;
+
+    const data: any = await res.json();
+    const content = data.choices?.[0]?.message?.content;
+    if (!content) return null;
+
+    const parsed = JSON.parse(content);
+    return {
+      activeIngredients: parsed.activeIngredients || medicineName,
+      drugClass: parsed.drugClass || 'Therapeutic Medication',
+      dosage: parsed.dosage || dosage || 'As directed',
+      frequency: parsed.frequency || 'Daily',
+      duration: parsed.duration || 'Ongoing',
+      purpose: parsed.purpose || 'Prescribed by your physician for therapeutic maintenance.',
+      timingInstructions: parsed.timingInstructions || 'Take with water as directed by your physician.',
+      precautions: parsed.precautions || 'Take regularly at the same time each day.',
+      interactions: parsed.interactions || 'Consult your doctor before starting new medications.',
+      whatToAvoid: parsed.whatToAvoid || 'Avoid alcohol and unverified dietary supplements.',
+      warnings: parsed.warnings || 'Contact your clinic if you experience dizziness or allergic reactions.',
       simplifiedExplanation: parsed.simplifiedExplanation || `This medicine helps keep your body healthy and balanced when taken as directed.`,
     };
   }
@@ -581,4 +781,598 @@ Return ONLY valid JSON with this exact structure:
       researchSource: 'Clinical Pharmacopeia Heuristic Model',
     };
   }
+
+  /**
+   * Conversational AI Clinical Pharmacologist & Medicine Chat Assistant
+   * Provides a ChatGPT / Gemini style chatbot interface for searching and querying medicines.
+   */
+  public static async chatWithAssistant(
+    message: string,
+    history: Array<{ role: 'user' | 'assistant'; content: string }> = []
+  ): Promise<{
+    reply: string;
+    identifiedMedicine?: EnrichedMedicineDetails | null;
+    suggestedFollowUps?: string[];
+  }> {
+    const trimmed = (message || '').trim();
+    if (!trimmed) {
+      return {
+        reply: "Hello! I am your **AI Clinical Pharmacologist & Medicine Assistant** (powered like ChatGPT/Gemini). You can search any medication name, ask why a drug is prescribed, check food and drug interactions, or verify dosages.",
+        suggestedFollowUps: [
+          "Explain Telmisartan 40mg (Blood Pressure)",
+          "Why is Metformin prescribed and when to take it?",
+          "What foods and painkillers to avoid with Atorvastatin?",
+        ],
+      };
+    }
+
+    const groqKey = AIConfigService.getGroqKey();
+    const geminiKey = AIConfigService.getGeminiKey();
+    const openAIKey = AIConfigService.getOpenAIKey();
+
+    // Extract clean drug name from conversational sentence (e.g. "Tell me about Metformin 500mg" -> "Metformin 500mg")
+    const cleanDrugQuery = this.extractCleanDrugName(trimmed);
+
+    // Perform clinical enrichment if query contains a drug
+    let potentialMedicine: EnrichedMedicineDetails | null = null;
+    try {
+      potentialMedicine = await this.enrichMedicine({ name: cleanDrugQuery });
+    } catch {
+      potentialMedicine = null;
+    }
+
+    // 1. Groq LPU Ultra-Fast Conversational Chat (Llama-3.3-70B)
+    if (groqKey) {
+      try {
+        const groqReply = await this.queryGroqChat(trimmed, history, groqKey);
+        if (groqReply) {
+          return {
+            reply: groqReply,
+            identifiedMedicine: potentialMedicine,
+            suggestedFollowUps: this.generateFollowUpQuestions(cleanDrugQuery, potentialMedicine?.name),
+          };
+        }
+      } catch (err: any) {
+        console.warn('[MedicineLookupService] Groq chat fallback:', err.message);
+      }
+    }
+
+    // 1b. Google Gemini Flash Conversational Chat
+    if (geminiKey) {
+      try {
+        const geminiReply = await this.queryGeminiChat(trimmed, history, geminiKey);
+        if (geminiReply) {
+          return {
+            reply: geminiReply,
+            identifiedMedicine: potentialMedicine,
+            suggestedFollowUps: this.generateFollowUpQuestions(cleanDrugQuery, potentialMedicine?.name),
+          };
+        }
+      } catch (err: any) {
+        console.warn('[MedicineLookupService] Gemini chat fallback:', err.message);
+      }
+    }
+
+    // 2. OpenAI GPT-4o Conversational Chat
+    if (openAIKey) {
+      try {
+        const openAIReply = await this.queryOpenAIChat(trimmed, history, openAIKey);
+        if (openAIReply) {
+          return {
+            reply: openAIReply,
+            identifiedMedicine: potentialMedicine,
+            suggestedFollowUps: this.generateFollowUpQuestions(trimmed, potentialMedicine?.name),
+          };
+        }
+      } catch (err: any) {
+        console.warn('[MedicineLookupService] OpenAI chat fallback:', err.message);
+      }
+    }
+
+    // 3. Clinical Pharmacopeia & OpenFDA Native Synthesis (Instant & Accurate)
+    const synthesized = this.synthesizeClinicalChatReply(trimmed, potentialMedicine);
+    return {
+      reply: synthesized.reply,
+      identifiedMedicine: potentialMedicine,
+      suggestedFollowUps: synthesized.followUps,
+    };
+  }
+
+  private static async queryGroqChat(
+    message: string,
+    history: Array<{ role: 'user' | 'assistant'; content: string }>,
+    apiKey: string
+  ): Promise<string | null> {
+    const messages = [
+      {
+        role: 'system',
+        content: `You are Dr. Mira, a senior clinical pharmacologist and compassionate AI medical assistant for elderly patients and families.
+Provide clear, accurate, and easy-to-understand medical explanations for medicines, indications, proper administration, food/drug interactions, precautions for senior citizens, and warning symptoms.
+Format your answer with clear markdown headings (###), bullet points, and practical advice.
+Always include a compassionate closing note reminding the patient to follow their prescribing doctor's exact directions.`,
+      },
+      ...history.slice(-6).map((h) => ({
+        role: h.role as 'user' | 'assistant',
+        content: h.content,
+      })),
+      { role: 'user', content: message },
+    ];
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12000);
+
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        messages,
+        temperature: 0.3,
+        max_tokens: 1200,
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    if (!res.ok) return null;
+    const data: any = await res.json();
+    return data.choices?.[0]?.message?.content || null;
+  }
+
+  private static async queryGeminiChat(
+    message: string,
+    history: Array<{ role: 'user' | 'assistant'; content: string }>,
+    apiKey: string
+  ): Promise<string | null> {
+    const systemPrompt = `You are Dr. Mira, a senior clinical pharmacologist and compassionate AI medical assistant for elderly patients and families.
+Provide clear, accurate, and easy-to-understand medical explanations for medicines, indications, proper administration, food/drug interactions, precautions for senior citizens, and warning symptoms.
+Format your answer with clear markdown headings (###), bullet points, and practical advice.
+Always include a compassionate closing note reminding the patient to follow their prescribing doctor's exact directions.`;
+
+    const contents = [
+      { role: 'user', parts: [{ text: systemPrompt }] },
+      { role: 'model', parts: [{ text: "Understood. I am Dr. Mira, ready to provide clinical pharmacology guidance and elderly care advice." }] },
+      ...history.slice(-6).map((h) => ({
+        role: h.role === 'user' ? 'user' : 'model',
+        parts: [{ text: h.content }],
+      })),
+      { role: 'user', parts: [{ text: message }] },
+    ];
+
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12000);
+
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents,
+        generationConfig: {
+          temperature: 0.3,
+          maxOutputTokens: 1000,
+        },
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    if (!res.ok) return null;
+    const data: any = await res.json();
+    return data.candidates?.[0]?.content?.parts?.[0]?.text || null;
+  }
+
+  private static async queryOpenAIChat(
+    message: string,
+    history: Array<{ role: 'user' | 'assistant'; content: string }>,
+    apiKey: string
+  ): Promise<string | null> {
+    const messages = [
+      {
+        role: 'system',
+        content: `You are Dr. Mira, a senior clinical pharmacologist and compassionate AI medical assistant for elderly patients and families.
+Provide clear, accurate, and easy-to-understand medical explanations for medicines, indications, proper administration, food/drug interactions, precautions for senior citizens, and warning symptoms.
+Format your answer with clear markdown headings (###), bullet points, and practical advice.`,
+      },
+      ...history.slice(-6).map((h) => ({
+        role: h.role as 'user' | 'assistant',
+        content: h.content,
+      })),
+      { role: 'user', content: message },
+    ];
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12000);
+
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages,
+        temperature: 0.3,
+        max_tokens: 1000,
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    if (!res.ok) return null;
+    const data: any = await res.json();
+    return data.choices?.[0]?.message?.content || null;
+  }
+
+  private static synthesizeClinicalChatReply(
+    query: string,
+    medicine: EnrichedMedicineDetails | null
+  ): { reply: string; followUps: string[] } {
+    if (!medicine || !medicine.name) {
+      return {
+        reply: `I searched for **"${query}"**, but could not find an exact medication match in clinical records. \n\n*Tip:* Please check the spelling of your medicine (for example: *Telmisartan*, *Metformin*, *Atorvastatin*, *Amlodipine*, *Augmentin*, *Pantoprazole*), or ask me any question regarding your prescriptions!`,
+        followUps: [
+          'What is Telmisartan 40mg used for?',
+          'How does Metformin work for diabetes?',
+          'What are safe pain relievers for seniors?',
+        ],
+      };
+    }
+
+    const reply = `### 💊 Clinical Overview: **${medicine.name}**
+
+**Active Formulation**: \`${medicine.activeIngredients || medicine.name}\`  
+**Therapeutic Category**: \`${medicine.drugClass || 'Prescription Medication'}\`
+
+---
+
+#### 🎯 Why It Is Prescribed
+${medicine.purpose}
+
+#### ⏰ When & How To Take
+- **Standard Schedule**: ${medicine.timingInstructions || medicine.instructions}
+- **Frequency**: ${medicine.frequency || 'Daily'}
+- *Senior Tip*: Take it at the exact same hour every day to build a safe daily habit.
+
+#### 🛡️ Precautions For Seniors
+${medicine.precautions}
+
+#### ⚠️ Food & Drug Interactions (What to Avoid)
+- **What to Avoid**: ${medicine.whatToAvoid}
+- **Interactions**: ${medicine.interactions}
+
+#### 🚨 Warning Symptoms
+${medicine.warnings}
+
+---
+💬 *Elderly-Friendly Summary:* ${medicine.simplifiedExplanation}`;
+
+    return {
+      reply,
+      followUps: this.generateFollowUpQuestions(query, medicine.name),
+    };
+  }
+
+  private static generateFollowUpQuestions(query: string, medName?: string): string[] {
+    const target = medName || query;
+    return [
+      `What should I do if I miss a dose of ${target}?`,
+      `What are the most common side effects of ${target}?`,
+      `Can ${target} be taken with food or on an empty stomach?`,
+    ];
+  }
+
+  private static extractCleanDrugName(query: string): string {
+    let clean = query
+      .replace(/^(tell me about|explain|why is|what is|what are the side effects of|how to take|can i take|is it safe to take|side effects of|food interactions with|information about|dose of|usage of)\s+/i, '')
+      .replace(/\s+(prescribed|used for|and when should i take it|and when to take it|side effects|precautions|interactions|safe for elderly)\??$/i, '')
+      .replace(/[?.,!]/g, '')
+      .trim();
+
+    return clean || query;
+  }
+
+  /**
+   * Direct Multimodal LLM Vision Handover (Google Gemini 1.5/2.0 Flash or OpenAI GPT-4o Vision)
+   * Sends uploaded prescription image directly to Gemini/ChatGPT for comprehensive clinical analysis.
+   */
+  public static async analyzePrescriptionImageWithChatLLM(
+    filePath: string,
+    mimeType: string,
+    userQuestion?: string
+  ): Promise<{
+    reply: string;
+    identifiedMedicines?: EnrichedMedicineDetails[];
+    doctor?: { name: string; specialty: string };
+    hospital?: { name: string; address: string };
+  }> {
+    const groqKey = AIConfigService.getGroqKey();
+    const geminiKey = AIConfigService.getGeminiKey();
+    const openAIKey = AIConfigService.getOpenAIKey();
+
+    if (!fs.existsSync(filePath)) {
+      throw new Error('Prescription file not found on server');
+    }
+
+    const fileBuffer = fs.readFileSync(filePath);
+    const base64Data = fileBuffer.toString('base64');
+    const cleanMime = mimeType.startsWith('image') ? mimeType : 'image/jpeg';
+
+    const systemPrompt = `You are Dr. Mira, a senior clinical pharmacologist, geriatric medicine specialist, and medical document AI expert.
+Examine this uploaded doctor prescription image with utmost precision and clinical depth.
+
+Provide a comprehensive, high-quality, professional clinical report formatted in clean Markdown:
+
+### 🏥 1. Prescribing Doctor & Clinic
+- **Doctor Name & Qualifications**: [Doctor Name, MBBS/MD/DM credentials, Registration No. or state "Not detected"]
+- **Clinic / Hospital**: [Hospital/Clinic name and phone if present]
+- **Date of Prescription**: [Date or state "Not specified"]
+- **Diagnosis / Health Condition**: [Diagnosis stated or clinical condition inferred from medicines]
+
+---
+
+### 💊 2. Detailed Medication Breakdown & Pharmacology
+For EACH prescribed medication found on the document, provide this exact breakdown:
+
+#### 🔹 [Medicine Name & Strength] (e.g. Tab. Telmisartan 40mg)
+- **Active Composition**: [Generic salts e.g. Telmisartan 40mg]
+- **Therapeutic Class**: [e.g. Angiotensin II Receptor Blocker (ARB)]
+- **Why It Is Prescribed**: [Detailed clinical explanation of why the doctor prescribed this specific medicine for this condition]
+- **When & How to Take**: [Exact schedule - Morning/Night, before/after food, with full glass of water]
+- **Key Safety Precautions for Seniors**: [Crucial precautions e.g. stand up slowly, monitor blood pressure weekly, stay hydrated]
+- **Food & Drug Interactions (What to Avoid)**: [Specific foods, drinks, or OTC pain relievers to strictly avoid]
+- **🚨 Red-Flag Warnings**: [Symptoms that require calling the clinic immediately]
+- **💬 Plain-Language Summary**: [A comforting 1-2 sentence explanation for an elderly patient]
+
+---
+
+### 📋 3. Daily Schedule & Caregiver Action Plan
+- A simple daily timeline (Morning, Afternoon, Evening, Bedtime) summarizing when to take each medication.
+
+${userQuestion ? `\n\nUser Question about this prescription: "${userQuestion}"\nAddress the user's question clearly in your response.` : ''}
+
+CRITICAL: At the very end of your response, output a JSON block with the extracted medicines array for the automated reminder system:
+\`\`\`json
+{
+  "doctor": { "name": "Doctor Name", "specialty": "Specialty" },
+  "hospital": { "name": "Hospital Name" },
+  "medicines": [
+    {
+      "name": "Medicine Name",
+      "dosage": "Dosage",
+      "frequency": "Frequency",
+      "instructions": "Instructions",
+      "duration": "Duration",
+      "activeIngredients": "Active Ingredients",
+      "drugClass": "Drug Class",
+      "purpose": "Purpose",
+      "timingInstructions": "Timing Instructions",
+      "precautions": "Precautions",
+      "interactions": "Interactions",
+      "whatToAvoid": "What to Avoid",
+      "warnings": "Warnings",
+      "simplifiedExplanation": "Simplified Explanation"
+    }
+  ]
 }
+\`\`\``;
+
+    // 1. Groq Llama 3.2 Vision (Direct Image Handover - Ultra Fast)
+    if (groqKey) {
+      try {
+        console.log('[MedicineLookupService] Handing over prescription image directly to Groq Llama 3.2 Vision...');
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 35000);
+
+        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${groqKey}`,
+          },
+          body: JSON.stringify({
+            model: 'llama-3.2-11b-vision-preview',
+            messages: [
+              {
+                role: 'user',
+                content: [
+                  { type: 'text', text: systemPrompt },
+                  {
+                    type: 'image_url',
+                    image_url: {
+                      url: `data:${cleanMime};base64,${base64Data}`,
+                    },
+                  },
+                ],
+              },
+            ],
+            max_tokens: 2500,
+            temperature: 0.2,
+          }),
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+
+        if (res.ok) {
+          const data: any = await res.json();
+          const replyText = data.choices?.[0]?.message?.content;
+          if (replyText) {
+            return this.parseVisionChatReply(replyText);
+          }
+        }
+      } catch (err: any) {
+        console.warn('[MedicineLookupService] Groq Vision chat error:', err.message);
+      }
+    }
+
+    // 1b. Google Gemini 1.5 Flash Vision (Direct Image Handover)
+    if (geminiKey) {
+      try {
+        console.log('[MedicineLookupService] Handing over prescription image directly to Gemini 1.5 Flash Vision...');
+        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`;
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 35000);
+
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  { text: systemPrompt },
+                  {
+                    inline_data: {
+                      mime_type: cleanMime,
+                      data: base64Data,
+                    },
+                  },
+                ],
+              },
+            ],
+            generationConfig: {
+              temperature: 0.2,
+              maxOutputTokens: 2500,
+            },
+          }),
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+
+        if (res.ok) {
+          const data: any = await res.json();
+          const replyText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (replyText) {
+            return this.parseVisionChatReply(replyText);
+          }
+        }
+      } catch (err: any) {
+        console.warn('[MedicineLookupService] Gemini Vision chat error:', err.message);
+      }
+    }
+
+    // 2. OpenAI GPT-4o Vision (Direct Image Handover)
+    if (openAIKey) {
+      try {
+        console.log('[MedicineLookupService] Handing over prescription image directly to OpenAI GPT-4o Vision...');
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 35000);
+
+        const res = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${openAIKey}`,
+          },
+          body: JSON.stringify({
+            model: 'gpt-4o',
+            messages: [
+              {
+                role: 'user',
+                content: [
+                  { type: 'text', text: systemPrompt },
+                  {
+                    type: 'image_url',
+                    image_url: {
+                      url: `data:${cleanMime};base64,${base64Data}`,
+                      detail: 'high',
+                    },
+                  },
+                ],
+              },
+            ],
+            max_tokens: 2500,
+            temperature: 0.2,
+          }),
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+
+        if (res.ok) {
+          const data: any = await res.json();
+          const replyText = data.choices?.[0]?.message?.content;
+          if (replyText) {
+            return this.parseVisionChatReply(replyText);
+          }
+        }
+      } catch (err: any) {
+        console.warn('[MedicineLookupService] OpenAI Vision chat error:', err.message);
+      }
+    }
+
+    // 3. Fallback: Local Tesseract OCR + Clinical NLP + Pharmacopeia Deep Synthesis
+    console.log('[MedicineLookupService] Running local OCR & clinical pharmacopeia synthesis...');
+    const ocrProvider = new TesseractOCRProvider();
+    const extracted = await ocrProvider.extractPrescription(filePath, mimeType, path.basename(filePath));
+    const enriched = await this.enrichMedicines(extracted.medicines);
+
+    let reply = `### 🏥 1. Prescribing Doctor & Clinic\n`;
+    reply += `- **Doctor**: ${extracted.doctor?.name || 'Not detected on document'}\n`;
+    reply += `- **Clinic / Hospital**: ${extracted.hospital?.name || 'Medical Clinic'}\n`;
+    reply += `- **Date**: ${extracted.prescriptionDate ? new Date(extracted.prescriptionDate).toLocaleDateString() : 'Recent'}\n\n`;
+
+    if (enriched.length === 0) {
+      reply += `⚠️ **Notice**: I scanned the uploaded document with optical character recognition, but no legible medications could be recognized from the image pixels.\n\n*Suggestion*: Please enter your **Groq API Key**, **Google Gemini API Key**, or **OpenAI API Key** in **AI Model Settings** to activate ultra-fast live multimodal vision, or type the medication name directly in this chat!`;
+    } else {
+      reply += `### 💊 2. Prescribed Medications Breakdown\n\n`;
+      for (const m of enriched) {
+        reply += `#### 🔹 **${m.name}**\n`;
+        reply += `- **Active Composition**: \`${m.activeIngredients || m.name}\`\n`;
+        reply += `- **Drug Class**: \`${m.drugClass || 'Therapeutic Agent'}\`\n`;
+        reply += `- **Why Prescribed**: ${m.purpose}\n`;
+        reply += `- **When & How to Take**: ${m.timingInstructions || m.instructions}\n`;
+        reply += `- **Precautions**: ${m.precautions}\n`;
+        reply += `- **What to Avoid & Food Interactions**: ${m.whatToAvoid || m.interactions}\n`;
+        reply += `- **🚨 Warning Signs**: ${m.warnings}\n`;
+        reply += `- **💬 Simple Explanation**: ${m.simplifiedExplanation}\n\n`;
+      }
+    }
+
+    return {
+      reply,
+      identifiedMedicines: enriched,
+      doctor: extracted.doctor ? { name: extracted.doctor.name || '', specialty: extracted.doctor.specialty || '' } : undefined,
+      hospital: extracted.hospital ? { name: extracted.hospital.name || '', address: extracted.hospital.address || '' } : undefined,
+    };
+  }
+
+  private static parseVisionChatReply(replyText: string): {
+    reply: string;
+    identifiedMedicines?: EnrichedMedicineDetails[];
+    doctor?: { name: string; specialty: string };
+    hospital?: { name: string; address: string };
+  } {
+    let cleanReply = replyText;
+    let identifiedMedicines: EnrichedMedicineDetails[] = [];
+    let doctor: { name: string; specialty: string } | undefined;
+    let hospital: { name: string; address: string } | undefined;
+
+    const jsonMatch = replyText.match(/```json\s*([\s\S]*?)\s*```/);
+    if (jsonMatch && jsonMatch[1]) {
+      try {
+        const parsed = JSON.parse(jsonMatch[1]);
+        if (Array.isArray(parsed.medicines)) {
+          identifiedMedicines = parsed.medicines;
+        }
+        if (parsed.doctor) doctor = parsed.doctor;
+        if (parsed.hospital) hospital = parsed.hospital;
+
+        cleanReply = replyText.replace(/```json[\s\S]*?```/, '').trim();
+      } catch {
+        // Fallback to raw text
+      }
+    }
+
+    return {
+      reply: cleanReply,
+      identifiedMedicines,
+      doctor,
+      hospital,
+    };
+  }
+}
+

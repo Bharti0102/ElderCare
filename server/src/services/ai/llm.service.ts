@@ -9,9 +9,10 @@ export class LLMService {
 
   public static async generateResponse(
     messages: ChatMessage[],
-    systemPrompt?: string
+    systemPrompt?: string,
+    language?: string
   ): Promise<LLMResponse> {
-    return this.provider.chat(messages, systemPrompt);
+    return this.provider.chat(messages, systemPrompt, language);
   }
 
   public static getProviderName(): string {

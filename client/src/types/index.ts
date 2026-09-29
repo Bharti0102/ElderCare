@@ -32,11 +32,14 @@ export interface User {
   phone?: string;
 }
 
+export type ContactCategory = 'FAMILY' | 'CAREGIVER' | 'DOCTOR' | 'EMERGENCY';
+
 export interface EmergencyContact {
   _id: string;
   userId: string;
   name: string;
   relationship: string;
+  category?: ContactCategory;
   phone: string;
   isPrimary: boolean;
   createdAt: string;
@@ -46,6 +49,7 @@ export interface EmergencyContact {
 export interface CreateContactDTO {
   name: string;
   relationship: string;
+  category?: ContactCategory;
   phone: string;
   isPrimary?: boolean;
 }
@@ -53,9 +57,11 @@ export interface CreateContactDTO {
 export interface UpdateContactDTO {
   name?: string;
   relationship?: string;
+  category?: ContactCategory;
   phone?: string;
   isPrimary?: boolean;
 }
+
 
 export type ReminderCategory = 'MEDICATION' | 'APPOINTMENT' | 'HYDRATION' | 'GENERAL';
 export type ReminderRepeat = 'none' | 'daily' | 'weekly' | 'monthly';
@@ -232,6 +238,10 @@ export interface InitiateHospitalCallDTO {
   preferredDate?: string;
   preferredTime?: string;
   patientNotes?: string;
+  isAvailable?: boolean;
+  confirmedTime?: string;
+  receptionistSpeech?: string;
+  aiTranscript?: string;
 }
 
 export interface HospitalCallResponse {
@@ -263,3 +273,42 @@ export interface VoiceProcessResponse {
     volume: number;
   };
 }
+
+export interface HospitalReception {
+  _id: string;
+  userId: string;
+  hospitalName: string;
+  receptionPhone: string;
+  doctorName?: string;
+  department?: string;
+  address?: string;
+  availableSlots: string[];
+  notes?: string;
+  isFavorite: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateReceptionDTO {
+  hospitalName: string;
+  receptionPhone: string;
+  doctorName?: string;
+  department?: string;
+  address?: string;
+  availableSlots?: string[];
+  notes?: string;
+  isFavorite?: boolean;
+}
+
+export interface CreateDirectAppointmentDTO {
+  hospital: string;
+  receptionPhone: string;
+  doctor?: string;
+  department?: string;
+  requestedDate: string;
+  requestedTime: string;
+  patientNotes?: string;
+  source?: AppointmentSource;
+  status?: AppointmentStatus;
+}
+

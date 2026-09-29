@@ -11,6 +11,10 @@ export const createContactSchema = z.object({
     .trim()
     .min(1, 'Relationship is required')
     .max(50, 'Relationship cannot exceed 50 characters'),
+  category: z
+    .enum(['FAMILY', 'CAREGIVER', 'DOCTOR', 'EMERGENCY'])
+    .optional()
+    .default('FAMILY'),
   phone: z
     .string({ required_error: 'Phone number is required' })
     .trim()
@@ -32,6 +36,9 @@ export const updateContactSchema = z.object({
     .min(1, 'Relationship is required')
     .max(50, 'Relationship cannot exceed 50 characters')
     .optional(),
+  category: z
+    .enum(['FAMILY', 'CAREGIVER', 'DOCTOR', 'EMERGENCY'])
+    .optional(),
   phone: z
     .string()
     .trim()
@@ -43,3 +50,4 @@ export const updateContactSchema = z.object({
 
 export type CreateContactInput = z.infer<typeof createContactSchema>;
 export type UpdateContactInput = z.infer<typeof updateContactSchema>;
+

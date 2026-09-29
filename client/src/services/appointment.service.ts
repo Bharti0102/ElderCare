@@ -5,7 +5,11 @@ import {
   InitiateHospitalCallDTO,
   HospitalCallResponse,
   HospitalTarget,
+  HospitalReception,
+  CreateReceptionDTO,
+  CreateDirectAppointmentDTO,
 } from '../types';
+
 
 export const initiateHumanHospitalCall = async (
   data: InitiateHospitalCallDTO
@@ -100,3 +104,63 @@ export const getHospitalTarget = async (
   }
   throw new Error(response.data.error?.message || 'Failed to resolve hospital details');
 };
+
+// --- Saved Clinic Receptions ---
+
+export const getSavedReceptions = async (): Promise<HospitalReception[]> => {
+  const response = await api.get<ApiResponse<{ receptions: HospitalReception[] }>>(
+    '/appointments/receptions'
+  );
+  if (response.data.success && response.data.data) {
+    return response.data.data.receptions;
+  }
+  throw new Error(response.data.error?.message || 'Failed to retrieve saved clinic receptions');
+};
+
+export const createSavedReception = async (
+  data: CreateReceptionDTO
+): Promise<HospitalReception> => {
+  const response = await api.post<ApiResponse<{ reception: HospitalReception }>>(
+    '/appointments/receptions',
+    data
+  );
+  if (response.data.success && response.data.data) {
+    return response.data.data.reception;
+  }
+  throw new Error(response.data.error?.message || 'Failed to save clinic reception');
+};
+
+export const updateSavedReception = async (
+  id: string,
+  data: Partial<CreateReceptionDTO>
+): Promise<HospitalReception> => {
+  const response = await api.put<ApiResponse<{ reception: HospitalReception }>>(
+    `/appointments/receptions/${id}`,
+    data
+  );
+  if (response.data.success && response.data.data) {
+    return response.data.data.reception;
+  }
+  throw new Error(response.data.error?.message || 'Failed to update clinic reception');
+};
+
+export const deleteSavedReception = async (id: string): Promise<void> => {
+  const response = await api.delete<ApiResponse<null>>(`/appointments/receptions/${id}`);
+  if (!response.data.success) {
+    throw new Error(response.data.error?.message || 'Failed to remove clinic reception');
+  }
+};
+
+export const createDirectAppointment = async (
+  data: CreateDirectAppointmentDTO
+): Promise<Appointment> => {
+  const response = await api.post<ApiResponse<{ appointment: Appointment }>>(
+    '/appointments',
+    data
+  );
+  if (response.data.success && response.data.data) {
+    return response.data.data.appointment;
+  }
+  throw new Error(response.data.error?.message || 'Failed to book appointment');
+};
+

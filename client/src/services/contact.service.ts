@@ -1,13 +1,15 @@
 import api from './api';
 import { ApiResponse, EmergencyContact, CreateContactDTO, UpdateContactDTO } from '../types';
 
-export const getContacts = async (): Promise<EmergencyContact[]> => {
-  const response = await api.get<ApiResponse<{ contacts: EmergencyContact[] }>>('/contacts');
+export const getContacts = async (category?: string): Promise<EmergencyContact[]> => {
+  const url = category ? `/contacts?category=${encodeURIComponent(category)}` : '/contacts';
+  const response = await api.get<ApiResponse<{ contacts: EmergencyContact[] }>>(url);
   if (response.data.success && response.data.data) {
     return response.data.data.contacts;
   }
-  throw new Error(response.data.error?.message || 'Failed to fetch emergency contacts');
+  throw new Error(response.data.error?.message || 'Failed to fetch contacts');
 };
+
 
 export const createContact = async (data: CreateContactDTO): Promise<EmergencyContact> => {
   const response = await api.post<ApiResponse<{ contact: EmergencyContact }>>('/contacts', data);

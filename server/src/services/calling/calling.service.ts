@@ -5,6 +5,8 @@ import { InitiateCaregiverCallInput } from '../../validators/calling.validator';
 import { AppError } from '../../utils/apiError';
 import { User } from '../../models/User';
 import { SmsService } from '../../integrations/notifications/sms.service';
+import { PushService } from '../../integrations/notifications/push.service';
+import { getIO } from '../../server';
 
 export class CallingService {
   /**
@@ -45,7 +47,39 @@ export class CallingService {
       notes: input?.message || 'Caregiver direct-dial initiated',
     });
 
-    // 4. Automatically dispatch instant one-tap call link SMS to caregiver's phone
+    // 4. Dispatch WhatsApp-style Direct Notifications (100% Free)
+    // A. Real-time direct socket ringing for online caregiver devices
+    try {
+      const io = getIO();
+      if (io) {
+        const incomingAlert = {
+          callId: call._id.toString(),
+          callerName: (user as any)?.name || 'Mom / Dad',
+          contactName: contact.name,
+          relationship: contact.relationship,
+          callType: input?.callType || 'VOICE',
+          startedAt: call.startedAt,
+        };
+        io.to(`contact:${contact._id.toString()}`).emit('call:incoming', incomingAlert);
+        io.to(`user:${userId}`).emit('call:incoming', incomingAlert);
+      }
+    } catch (err: any) {
+      console.warn('[CallingService] Socket incoming alert note:', err.message);
+    }
+
+    // B. Native W3C Web Push Notification (for backgrounded/locked devices)
+    PushService.sendIncomingCallPush({
+      callId: call._id.toString(),
+      contactId: contact._id.toString(),
+      userId,
+      callerName: (user as any)?.name || 'Mom / Dad',
+      contactName: contact.name,
+      callType: input?.callType || 'VOICE',
+    }).catch((err) => {
+      console.warn('[CallingService] Direct Push notification note:', err.message);
+    });
+
+    // 5. Existing SMS fallback (preserved 100% intact)
     SmsService.sendCallLinkSms({
       recipientPhone: contact.phone,
       recipientName: contact.name,
@@ -248,6 +282,24 @@ export class CallingService {
     if (!call) {
       throw new AppError('Call not found or expired', 404, 'NOT_FOUND');
     }
+
+    // If this call ended, check if a newer call is currently active/ringing for the same user and contact
+    let activeCallId: string | null = null;
+    if (call.status === 'COMPLETED' || call.status === 'CANCELLED' || call.status === 'FAILED') {
+      const activeCall = await Call.findOne({
+        userId: (call.userId as any)?._id || call.userId,
+        $or: [
+          { contactName: call.contactName },
+          { phoneNumber: call.phoneNumber },
+        ],
+        status: { $in: ['REQUESTED', 'CALLING', 'CONNECTED'] },
+      }).sort({ createdAt: -1 });
+
+      if (activeCall) {
+        activeCallId = String(activeCall._id);
+      }
+    }
+
     return {
       _id: call._id,
       callerName: (call.userId as any)?.name || 'Elderly Parent',
@@ -255,6 +307,7 @@ export class CallingService {
       relationship: call.relationship,
       status: call.status,
       startedAt: call.startedAt,
+      activeCallId,
     };
   }
 

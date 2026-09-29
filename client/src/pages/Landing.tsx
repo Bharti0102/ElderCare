@@ -15,14 +15,15 @@ export const Landing: React.FC = () => {
           <span className="text-brand-600">Voice-First AI Care</span>
         </h1>
         <p className="max-w-2xl mx-auto text-lg sm:text-xl text-slate-600">
-          ElderCare AI coordinates emergency caregiver calls, explains handwritten prescriptions,
-          manages daily medication reminders, and offers warm conversational companionship.
+          ElderCare AI coordinates emergency caregiver video and voice calls,
+          manages daily medication reminders, and offers warm multilingual conversational companionship.
         </p>
+
       </div>
 
       <div className="flex flex-wrap items-center justify-center gap-4">
         <Link to="/" className="elder-btn-primary">
-          <span>Explore Foundation Dashboard</span>
+          <span>Open Health Dashboard</span>
           <ArrowRight className="w-5 h-5 ml-2" />
         </Link>
         <Link to="/profile" className="elder-btn-secondary">

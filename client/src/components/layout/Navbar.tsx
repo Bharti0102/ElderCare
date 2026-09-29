@@ -4,36 +4,32 @@ import {
   Heart,
   Phone,
   Bell,
-  FileText,
   MessageSquare,
   LayoutDashboard,
   User,
+  Calendar,
 } from 'lucide-react';
-import { StatusBadge } from '../ui/StatusBadge';
-import { DatabaseStatus } from '../../types';
+
 import { useAuth } from '../../context/AuthContext';
 
 interface NavbarProps {
-  serverStatus: 'online' | 'offline' | 'checking';
-  databaseStatus?: DatabaseStatus;
+  serverStatus?: 'online' | 'offline' | 'checking';
+  databaseStatus?: any;
   onRefreshHealth?: () => void;
   isRefreshingHealth?: boolean;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({
-  serverStatus,
-  databaseStatus,
-  onRefreshHealth,
-  isRefreshingHealth,
-}) => {
+export const Navbar: React.FC<NavbarProps> = () => {
   const { user } = useAuth();
   const navItems = [
     { to: '/', label: 'Overview', icon: LayoutDashboard },
     { to: '/reminders', label: 'Reminders', icon: Bell },
-    { to: '/calls', label: 'Emergency Calls', icon: Phone },
-    { to: '/prescription', label: 'Prescriptions', icon: FileText },
+    { to: '/appointments', label: 'Appointments', icon: Calendar },
+    { to: '/calls', label: 'Video Calls', icon: Phone },
     { to: '/chat', label: 'AI Companion', icon: MessageSquare },
   ];
+
+
 
   return (
     <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-sm">
@@ -49,7 +45,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 ElderCare<span className="text-brand-600 font-black">AI</span>
               </span>
               <span className="block text-xs font-semibold uppercase tracking-wider text-slate-400">
-                Care Coordinator
+                Family Health & Wellness
               </span>
             </div>
           </Link>
@@ -77,14 +73,8 @@ export const Navbar: React.FC<NavbarProps> = ({
             })}
           </nav>
 
-          {/* Right Action & Live Health Status */}
+          {/* Right Action */}
           <div className="flex items-center gap-4">
-            <StatusBadge
-              serverStatus={serverStatus}
-              databaseStatus={databaseStatus}
-              onRefresh={onRefreshHealth}
-              isRefreshing={isRefreshingHealth}
-            />
 
             {user ? (
               <Link

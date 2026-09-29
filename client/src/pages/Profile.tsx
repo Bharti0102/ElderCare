@@ -14,6 +14,11 @@ import {
   Heart,
   Shield,
   X,
+  Users,
+  Stethoscope,
+  Ambulance,
+  PhoneCall,
+  Sparkles,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -23,22 +28,27 @@ import {
   deleteContact,
   setPrimaryContact,
 } from '../services/contact.service';
-import { EmergencyContact, CreateContactDTO } from '../types';
+import { EmergencyContact, CreateContactDTO, ContactCategory } from '../types';
 
-const RELATIONSHIP_OPTIONS = [
-  'Daughter',
-  'Son',
-  'Spouse',
-  'Doctor',
-  'Caregiver',
-  'Neighbor',
-  'Other',
+const CATEGORY_OPTIONS: { value: ContactCategory; label: string; icon: any; color: string; bg: string }[] = [
+  { value: 'FAMILY', label: 'Family & Loved Ones', icon: Heart, color: 'text-rose-600', bg: 'bg-rose-50 border-rose-200' },
+  { value: 'CAREGIVER', label: 'Caregivers & Nurses', icon: Users, color: 'text-teal-600', bg: 'bg-teal-50 border-teal-200' },
+  { value: 'DOCTOR', label: 'Doctors & Clinics', icon: Stethoscope, color: 'text-sky-600', bg: 'bg-sky-50 border-sky-200' },
+  { value: 'EMERGENCY', label: 'Emergency SOS', icon: Ambulance, color: 'text-amber-700', bg: 'bg-amber-50 border-amber-200' },
 ];
+
+const RELATIONSHIPS_BY_CATEGORY: Record<ContactCategory, string[]> = {
+  FAMILY: ['Daughter', 'Son', 'Spouse', 'Grandchild', 'Sister', 'Brother', 'Mother', 'Father', 'Relative', 'Other Family'],
+  CAREGIVER: ['Primary Caregiver', 'Home Nurse', 'Physiotherapist', 'Care Assistant', 'Home Attendant'],
+  DOCTOR: ['Primary Physician', 'Cardiologist', 'General Physician', 'Specialist Doctor', 'Clinic Desk'],
+  EMERGENCY: ['Emergency Contact', 'Neighbor', 'Building Security', 'Local Ambulance (108)', 'Police (100)'],
+};
 
 export const Profile: React.FC = () => {
   const { user, logout, loading: authLoading } = useAuth();
 
   const [contacts, setContacts] = useState<EmergencyContact[]>([]);
+  const [selectedCategoryTab, setSelectedCategoryTab] = useState<'ALL' | ContactCategory>('ALL');
   const [loadingContacts, setLoadingContacts] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -47,6 +57,7 @@ export const Profile: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<EmergencyContact | null>(null);
   const [name, setName] = useState('');
+  const [category, setCategory] = useState<ContactCategory>('FAMILY');
   const [relationship, setRelationship] = useState('Daughter');
   const [phone, setPhone] = useState('');
   const [isPrimary, setIsPrimary] = useState(false);
@@ -59,7 +70,7 @@ export const Profile: React.FC = () => {
       const data = await getContacts();
       setContacts(data);
     } catch (err: any) {
-      setError(err.message || 'Failed to load emergency contacts.');
+      setError(err.message || 'Failed to load phonebook contacts.');
     } finally {
       setLoadingContacts(false);
     }
@@ -71,10 +82,12 @@ export const Profile: React.FC = () => {
     }
   }, [user, fetchContacts]);
 
-  const openAddModal = () => {
+  const openAddModal = (presetCategory?: ContactCategory) => {
+    const defaultCat = presetCategory || (selectedCategoryTab !== 'ALL' ? selectedCategoryTab : 'FAMILY');
     setEditingContact(null);
     setName('');
-    setRelationship('Daughter');
+    setCategory(defaultCat);
+    setRelationship(RELATIONSHIPS_BY_CATEGORY[defaultCat][0] || 'Daughter');
     setPhone('');
     setIsPrimary(contacts.length === 0);
     setIsModalOpen(true);
@@ -82,8 +95,10 @@ export const Profile: React.FC = () => {
   };
 
   const openEditModal = (contact: EmergencyContact) => {
+    const cat = contact.category || 'FAMILY';
     setEditingContact(contact);
     setName(contact.name);
+    setCategory(cat);
     setRelationship(contact.relationship);
     setPhone(contact.phone);
     setIsPrimary(contact.isPrimary);
@@ -91,9 +106,18 @@ export const Profile: React.FC = () => {
     setError(null);
   };
 
+  const handleCategoryChange = (newCat: ContactCategory) => {
+    setCategory(newCat);
+    // Reset relationship to first default in category if current isn't in it
+    const options = RELATIONSHIPS_BY_CATEGORY[newCat];
+    if (!options.includes(relationship)) {
+      setRelationship(options[0] || 'Contact');
+    }
+  };
+
   const handleSaveContact = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !phone) {
+    if (!name.trim() || !phone.trim()) {
       setError('Please provide both contact name and phone number.');
       return;
     }
@@ -103,9 +127,10 @@ export const Profile: React.FC = () => {
 
     try {
       const payload: CreateContactDTO = {
-        name,
+        name: name.trim(),
         relationship,
-        phone,
+        category,
+        phone: phone.trim(),
         isPrimary,
       };
 
@@ -114,7 +139,7 @@ export const Profile: React.FC = () => {
         setSuccessMsg(`Updated contact "${name}".`);
       } else {
         await createContact(payload);
-        setSuccessMsg(`Added "${name}" to emergency contacts.`);
+        setSuccessMsg(`Added "${name}" to your ${category.toLowerCase()} phonebook.`);
       }
 
       setIsModalOpen(false);
@@ -128,7 +153,7 @@ export const Profile: React.FC = () => {
   };
 
   const handleDelete = async (contact: EmergencyContact) => {
-    if (!window.confirm(`Are you sure you want to remove ${contact.name} from emergency contacts?`)) {
+    if (!window.confirm(`Are you sure you want to remove ${contact.name} from your phonebook?`)) {
       return;
     }
 
@@ -145,12 +170,23 @@ export const Profile: React.FC = () => {
   const handleMakePrimary = async (contactId: string) => {
     try {
       await setPrimaryContact(contactId);
-      setSuccessMsg('Primary emergency caregiver updated.');
+      setSuccessMsg('Primary caregiver updated.');
       await fetchContacts();
       setTimeout(() => setSuccessMsg(null), 4000);
     } catch (err: any) {
       setError(err.message || 'Failed to update primary contact.');
     }
+  };
+
+  // Filter contacts by category tab
+  const filteredContacts = contacts.filter((c) => {
+    if (selectedCategoryTab === 'ALL') return true;
+    return (c.category || 'FAMILY') === selectedCategoryTab;
+  });
+
+  const getCategoryMeta = (cat?: ContactCategory) => {
+    const match = CATEGORY_OPTIONS.find((opt) => opt.value === (cat || 'FAMILY'));
+    return match || CATEGORY_OPTIONS[0];
   };
 
   if (authLoading) {
@@ -169,9 +205,9 @@ export const Profile: React.FC = () => {
           <User className="w-8 h-8" />
         </div>
         <div className="space-y-2">
-          <h1 className="text-3xl font-extrabold text-slate-900">Sign In to Manage Caregivers</h1>
+          <h1 className="text-3xl font-extrabold text-slate-900">Sign In to Manage Phonebook</h1>
           <p className="text-slate-600 max-w-md mx-auto">
-            Create or sign in to your ElderCare account to add emergency contacts, primary caregivers, and doctors.
+            Create or sign in to your ElderCare account to add family members, caregivers, doctors, and emergency contacts.
           </p>
         </div>
         <div className="flex items-center justify-center gap-4">
@@ -188,9 +224,9 @@ export const Profile: React.FC = () => {
 
   // Logged In View
   return (
-    <div className="max-w-5xl mx-auto space-y-8">
+    <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in duration-200">
       {/* Header Profile Card */}
-      <div className="elder-card p-6 sm:p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+      <div className="elder-card p-6 sm:p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-6 bg-gradient-to-r from-white via-slate-50/50 to-white border border-slate-200/90 shadow-sm">
         <div className="flex items-center gap-4">
           <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-brand-600 to-sky-500 text-white flex items-center justify-center font-extrabold text-2xl shadow-md">
             {user.name.charAt(0).toUpperCase()}
@@ -231,23 +267,69 @@ export const Profile: React.FC = () => {
         </div>
       )}
 
-      {/* Emergency Contacts Management Section */}
+      {/* Family & Caregiver Phonebook Section */}
       <section className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h2 className="text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
-              <Heart className="w-6 h-6 text-rose-500 fill-rose-500" />
-              Emergency Caregiver Contacts
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand-50 text-brand-800 text-xs font-bold border border-brand-200 mb-2">
+              <Sparkles className="w-3.5 h-3.5 text-brand-600" />
+              <span>Multi-Contact Phonebook Directory</span>
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900">
+              Family & Caregiver Phonebook
             </h2>
             <p className="text-slate-600 text-sm mt-1">
-              Designated family and doctors contacted during voice-first "Call my daughter" or emergency prompts.
+              Add multiple loved ones, home nurses, doctors, and emergency SOS lines for instant video and voice reach.
             </p>
           </div>
 
-          <button onClick={openAddModal} className="elder-btn-primary gap-2">
-            <Plus className="w-5 h-5" />
-            <span>Add Caregiver</span>
+          <div className="flex items-center gap-3">
+            <button onClick={() => openAddModal()} className="elder-btn-primary gap-2">
+              <Plus className="w-5 h-5" />
+              <span>Add Contact</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Category Filter Tabs */}
+        <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-3">
+          <button
+            onClick={() => setSelectedCategoryTab('ALL')}
+            className={`px-4 py-2 rounded-xl text-xs font-extrabold transition-all ${
+              selectedCategoryTab === 'ALL'
+                ? 'bg-slate-900 text-white shadow-xs'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            All Contacts ({contacts.length})
           </button>
+
+          {CATEGORY_OPTIONS.map((opt) => {
+            const count = contacts.filter((c) => (c.category || 'FAMILY') === opt.value).length;
+            const Icon = opt.icon;
+            const isActive = selectedCategoryTab === opt.value;
+            return (
+              <button
+                key={opt.value}
+                onClick={() => setSelectedCategoryTab(opt.value)}
+                className={`px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-all ${
+                  isActive
+                    ? 'bg-brand-600 text-white shadow-xs'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-white' : opt.color}`} />
+                <span>{opt.label}</span>
+                <span
+                  className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                    isActive ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
+                  }`}
+                >
+                  {count}
+                </span>
+              </button>
+            );
+          })}
         </div>
 
         {/* Contacts Grid */}
@@ -255,96 +337,118 @@ export const Profile: React.FC = () => {
           <div className="py-12 flex justify-center text-brand-600">
             <Loader2 className="w-8 h-8 animate-spin" />
           </div>
-        ) : contacts.length === 0 ? (
-          <div className="elder-card p-12 text-center space-y-4 border-dashed border-2 border-slate-300">
+        ) : filteredContacts.length === 0 ? (
+          <div className="elder-card p-10 text-center space-y-4 border-dashed border-2 border-slate-300">
             <Shield className="w-12 h-12 text-slate-400 mx-auto" />
             <div>
-              <h3 className="text-lg font-bold text-slate-800">No emergency contacts registered yet</h3>
-              <p className="text-slate-500 text-sm max-w-sm mx-auto mt-1">
-                Add your primary family caregiver (e.g., daughter or son) so ElderCare AI can coordinate calls.
+              <h3 className="text-lg font-bold text-slate-800">
+                {selectedCategoryTab === 'ALL'
+                  ? 'No contacts in phonebook yet'
+                  : `No ${selectedCategoryTab.toLowerCase()} contacts added yet`}
+              </h3>
+              <p className="text-slate-500 text-sm max-w-md mx-auto mt-1">
+                Add multiple family members, personal caregivers, or doctors so you can connect in 1 tap anytime.
               </p>
             </div>
-            <button onClick={openAddModal} className="elder-btn-primary">
+            <button
+              onClick={() => openAddModal(selectedCategoryTab === 'ALL' ? 'FAMILY' : selectedCategoryTab)}
+              className="elder-btn-primary"
+            >
               <Plus className="w-5 h-5 mr-1.5" />
-              Add First Contact
+              <span>Add First Contact</span>
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {contacts.map((contact) => (
-              <div
-                key={contact._id}
-                className={`elder-card p-6 flex flex-col justify-between ${
-                  contact.isPrimary
-                    ? 'ring-2 ring-emerald-500 border-emerald-200 bg-white shadow-md'
-                    : 'bg-white'
-                }`}
-              >
-                <div className="space-y-4">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold uppercase tracking-wider text-brand-700 bg-brand-50 px-2.5 py-1 rounded-md">
-                          {contact.relationship}
-                        </span>
-                        {contact.isPrimary && (
-                          <span className="inline-flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-emerald-800 bg-emerald-100 px-2.5 py-1 rounded-md">
-                            <Star className="w-3.5 h-3.5 fill-emerald-600 text-emerald-600" />
-                            Primary Caregiver
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredContacts.map((contact) => {
+              const meta = getCategoryMeta(contact.category);
+              const CategoryIcon = meta.icon;
+
+              return (
+                <div
+                  key={contact._id}
+                  className={`elder-card p-6 flex flex-col justify-between transition-all hover:shadow-md ${
+                    contact.isPrimary
+                      ? 'ring-2 ring-emerald-500 border-emerald-200 bg-emerald-50/10'
+                      : 'bg-white border border-slate-200'
+                  }`}
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span
+                            className={`inline-flex items-center gap-1 text-[11px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-md border ${meta.bg} ${meta.color}`}
+                          >
+                            <CategoryIcon className="w-3 h-3" />
+                            {contact.category || 'FAMILY'}
                           </span>
-                        )}
+
+                          <span className="text-[11px] font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">
+                            {contact.relationship}
+                          </span>
+                        </div>
+
+                        <h3 className="text-xl font-extrabold text-slate-900 mt-1">{contact.name}</h3>
                       </div>
-                      <h3 className="text-xl font-bold text-slate-900 mt-2">{contact.name}</h3>
+
+                      <div className="flex items-center gap-1 text-slate-400">
+                        <button
+                          onClick={() => openEditModal(contact)}
+                          className="p-1.5 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
+                          title="Edit Contact"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(contact)}
+                          className="p-1.5 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                          title="Delete Contact"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
 
-                    <div className="flex items-center gap-1 text-slate-400">
-                      <button
-                        onClick={() => openEditModal(contact)}
-                        className="p-2 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
-                        title="Edit Contact"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(contact)}
-                        className="p-2 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                        title="Delete Contact"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                    <div className="p-3 bg-slate-50 rounded-xl flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <div className="p-1.5 bg-white text-brand-600 rounded-lg shadow-xs">
+                          <Phone className="w-3.5 h-3.5" />
+                        </div>
+                        <span className="font-mono text-sm font-bold text-slate-800">
+                          {contact.phone}
+                        </span>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="p-3.5 bg-slate-50 rounded-xl flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-white text-brand-600 rounded-lg shadow-xs">
-                        <Phone className="w-4 h-4" />
-                      </div>
-                      <span className="font-mono text-base font-semibold text-slate-900">
-                        {contact.phone}
+                  <div className="mt-5 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+                    {contact.isPrimary ? (
+                      <span className="font-bold text-emerald-700 flex items-center gap-1">
+                        <Star className="w-3.5 h-3.5 fill-emerald-600 text-emerald-600" />
+                        Primary Contact
                       </span>
-                    </div>
+                    ) : (
+                      <button
+                        onClick={() => handleMakePrimary(contact._id)}
+                        className="font-semibold text-brand-600 hover:text-brand-800 hover:underline flex items-center gap-1"
+                      >
+                        <Star className="w-3.5 h-3.5" />
+                        Set as Primary
+                      </button>
+                    )}
+
+                    <Link
+                      to="/calls"
+                      className="font-bold text-slate-600 hover:text-brand-600 flex items-center gap-1"
+                    >
+                      <PhoneCall className="w-3.5 h-3.5" />
+                      <span>Call Now</span>
+                    </Link>
                   </div>
                 </div>
-
-                <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between">
-                  {contact.isPrimary ? (
-                    <span className="text-xs font-semibold text-emerald-700 flex items-center gap-1.5">
-                      <CheckCircle2 className="w-4 h-4" />
-                      Voice Calling Target
-                    </span>
-                  ) : (
-                    <button
-                      onClick={() => handleMakePrimary(contact._id)}
-                      className="text-xs font-semibold text-brand-600 hover:text-brand-800 hover:underline flex items-center gap-1"
-                    >
-                      <Star className="w-3.5 h-3.5" />
-                      Set as Primary Caregiver
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>
@@ -352,10 +456,10 @@ export const Profile: React.FC = () => {
       {/* Add / Edit Contact Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 space-y-6 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 space-y-6 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between">
-              <h3 className="text-xl font-bold text-slate-900">
-                {editingContact ? 'Edit Emergency Contact' : 'Add Emergency Contact'}
+              <h3 className="text-xl font-black text-slate-900">
+                {editingContact ? 'Edit Contact' : 'Add New Contact'}
               </h3>
               <button
                 onClick={() => setIsModalOpen(false)}
@@ -366,30 +470,64 @@ export const Profile: React.FC = () => {
             </div>
 
             <form onSubmit={handleSaveContact} className="space-y-4">
+              {/* Category Selector Pills */}
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">
-                  Contact Name
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-2">
+                  Contact Category
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {CATEGORY_OPTIONS.map((opt) => {
+                    const Icon = opt.icon;
+                    const isSelected = category === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => handleCategoryChange(opt.value)}
+                        className={`p-3 rounded-2xl border text-left text-xs font-bold flex items-center gap-2.5 transition-all ${
+                          isSelected
+                            ? 'border-brand-600 bg-brand-50 text-brand-900 ring-2 ring-brand-500/20 shadow-xs'
+                            : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                        }`}
+                      >
+                        <Icon className={`w-4 h-4 ${isSelected ? 'text-brand-600' : opt.color}`} />
+                        <span>{opt.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                  Full Name
                 </label>
                 <input
                   type="text"
                   required
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Sarah Miller"
-                  className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:outline-none text-base"
+                  placeholder={
+                    category === 'DOCTOR'
+                      ? 'e.g. Dr. Rajesh Sharma'
+                      : category === 'FAMILY'
+                      ? 'e.g. Sarah Miller'
+                      : 'e.g. Sister Priya (Nurse)'
+                  }
+                  className="elder-input text-base"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">
-                  Relationship
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                  Role / Relationship
                 </label>
                 <select
                   value={relationship}
                   onChange={(e) => setRelationship(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:outline-none text-base bg-white"
+                  className="elder-input text-base bg-white"
                 >
-                  {RELATIONSHIP_OPTIONS.map((opt) => (
+                  {RELATIONSHIPS_BY_CATEGORY[category].map((opt) => (
                     <option key={opt} value={opt}>
                       {opt}
                     </option>
@@ -398,7 +536,7 @@ export const Profile: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
                   Phone Number
                 </label>
                 <input
@@ -406,8 +544,8 @@ export const Profile: React.FC = () => {
                   required
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  placeholder="+1 (555) 019-2834"
-                  className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:outline-none text-base"
+                  placeholder="+91 98765 43210 or +1 (555) 019-2834"
+                  className="elder-input text-base font-mono"
                 />
               </div>
 
@@ -421,9 +559,9 @@ export const Profile: React.FC = () => {
                 />
                 <label
                   htmlFor="primaryContactCheckbox"
-                  className="text-sm font-semibold text-slate-800 cursor-pointer"
+                  className="text-xs font-bold text-slate-800 cursor-pointer"
                 >
-                  Set as Primary Emergency Caregiver
+                  Set as Primary Contact for Instant Voice Prompts
                 </label>
               </div>
 

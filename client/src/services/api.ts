@@ -3,7 +3,7 @@ import { ApiResponse, HealthData } from '../types';
 
 const api: AxiosInstance = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '/api',
-  timeout: 10000,
+  timeout: 60000, // 60s default timeout for AI Vision & Clinical Pharmacology
   headers: {
     'Content-Type': 'application/json',
   },
@@ -13,10 +13,16 @@ const api: AxiosInstance = axios.create({
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    const customMessage =
+    let customMessage =
       error.response?.data?.error?.message ||
-      error.response?.data?.message ||
-      error.message;
+      error.response?.data?.message;
+
+    if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+      customMessage = 'The request took longer than expected to process. Please retry or check your network connection.';
+    } else if (!customMessage) {
+      customMessage = error.message;
+    }
+
     if (customMessage) {
       error.message = customMessage;
     }

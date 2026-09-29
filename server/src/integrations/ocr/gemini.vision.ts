@@ -1,30 +1,38 @@
 import fs from 'fs';
 import { IOCRProvider, ExtractedPrescriptionData } from './ocr.interface';
-import { MockOCRProvider } from './mock.ocr';
-import { env } from '../../config/env';
+import { TesseractOCRProvider } from './tesseract.ocr';
+import { AIConfigService } from '../../services/ai/ai-config.service';
 
 export class GeminiVisionProvider implements IOCRProvider {
   public readonly name = 'GeminiVisionProvider';
-  private fallbackMock = new MockOCRProvider();
+  private fallbackOCR = new TesseractOCRProvider();
 
   public async extractPrescription(
     filePath: string,
     mimeType: string,
     originalName: string
   ): Promise<ExtractedPrescriptionData> {
-    if (!env.GEMINI_API_KEY) {
-      console.log('[GeminiVisionProvider] No GEMINI_API_KEY detected. Using MockOCRProvider fallback.');
-      return this.fallbackMock.extractPrescription(filePath, mimeType, originalName);
+    const apiKey = AIConfigService.getGeminiKey();
+    if (!apiKey) {
+      console.log('[GeminiVisionProvider] No Gemini API key detected. Routing to local Tesseract OCR engine.');
+      return this.fallbackOCR.extractPrescription(filePath, mimeType, originalName);
     }
 
     try {
+      console.log(`[GeminiVisionProvider] Scanning prescription with Gemini 1.5 Flash Multimodal Vision...`);
       const fileBuffer = fs.readFileSync(filePath);
       const base64Data = fileBuffer.toString('base64');
+      const cleanMime = mimeType.startsWith('image') ? mimeType : 'image/jpeg';
 
-      const prompt = `You are a medical document OCR specialist. Extract structured information from this doctor prescription.
-Strict Medical Rules:
-- DO NOT invent or hallucinate information that is not in the image.
-- Return ONLY valid JSON matching this schema:
+      const prompt = `You are a clinical pharmacologist and medical document OCR specialist. Examine this uploaded doctor prescription image in full detail.
+CRITICAL INTEGRITY RULES:
+1. Only extract data that is actually written and clearly visible on this document.
+2. DO NOT hallucinate, guess, or invent doctor names, clinic names, or medicines.
+3. If doctor name or clinic name is not clearly visible, return empty strings "" for them.
+4. If a medication is partially illegible or handwriting cannot be deciphered, only extract what is genuinely legible, or return an empty medicines array [].
+5. If the image is unreadable, blurry, or not a prescription document, return "medicines": [], empty doctor/hospital, and in "rawText" state: "The handwriting or image quality is unclear. Unable to reliably identify medications."
+
+Respond ONLY with valid JSON in this exact structure:
 {
   "doctor": { "name": "string", "specialty": "string" },
   "hospital": { "name": "string", "address": "string" },
@@ -33,10 +41,10 @@ Strict Medical Rules:
   "medicines": [
     { "name": "string", "dosage": "string", "frequency": "string", "instructions": "string", "duration": "string" }
   ],
-  "rawText": "full plain text transcript of the document"
+  "rawText": "string"
 }`;
 
-      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${env.GEMINI_API_KEY}`;
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
       const payload = {
         contents: [
           {
@@ -44,7 +52,7 @@ Strict Medical Rules:
               { text: prompt },
               {
                 inline_data: {
-                  mime_type: mimeType.startsWith('image') ? mimeType : 'image/jpeg',
+                  mime_type: cleanMime,
                   data: base64Data,
                 },
               },
@@ -67,7 +75,7 @@ Strict Medical Rules:
         throw new Error(`Gemini Vision API error: ${res.status} ${res.statusText}`);
       }
 
-      const data = await res.json();
+      const data: any = await res.json();
       const rawJson = data.candidates?.[0]?.content?.parts?.[0]?.text;
       if (!rawJson) {
         throw new Error('Empty response from Gemini Vision');
@@ -81,11 +89,11 @@ Strict Medical Rules:
         prescriptionDate: parsed.prescriptionDate ? new Date(parsed.prescriptionDate) : new Date(),
         medicines: Array.isArray(parsed.medicines) ? parsed.medicines : [],
         rawText: parsed.rawText || '',
-        confidence: 0.95,
+        confidence: 0.96,
       };
-    } catch (err) {
-      console.warn('[GeminiVisionProvider] Vision extraction error, using MockOCRProvider fallback:', err);
-      return this.fallbackMock.extractPrescription(filePath, mimeType, originalName);
+    } catch (err: any) {
+      console.warn('[GeminiVisionProvider] Vision error, falling back to local Tesseract OCR engine:', err.message);
+      return this.fallbackOCR.extractPrescription(filePath, mimeType, originalName);
     }
   }
 }

@@ -25,7 +25,8 @@ export class ContactController {
     next: NextFunction
   ): Promise<void> {
     try {
-      const contacts = await ContactService.getContacts(req.user!.id);
+      const category = req.query.category ? String(req.query.category) : undefined;
+      const contacts = await ContactService.getContacts(req.user!.id, category);
       sendSuccess(res, { contacts }, 'Emergency contacts retrieved successfully');
     } catch (error) {
       next(error);

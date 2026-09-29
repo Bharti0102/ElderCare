@@ -27,6 +27,6 @@ export interface LLMResponse {
 
 export interface LLMProvider {
   name: string;
-  chat(messages: ChatMessage[], systemPrompt?: string): Promise<LLMResponse>;
+  chat(messages: ChatMessage[], systemPrompt?: string, language?: string): Promise<LLMResponse>;
   classifyIntent(userInput: string): Promise<IntentResult>;
 }

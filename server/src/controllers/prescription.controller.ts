@@ -31,6 +31,41 @@ export class PrescriptionController {
     }
   }
 
+  public static async aiAssistantChat(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const { message, history } = req.body;
+      const result = await MedicineLookupService.chatWithAssistant(message, history || []);
+      sendSuccess(res, result, 'AI assistant response generated');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  public static async aiAssistantVisionChat(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      if (!req.file) {
+        throw new AppError('Please select a prescription image to analyze', 400, 'FILE_MISSING');
+      }
+      const message = req.body.message || '';
+      const result = await MedicineLookupService.analyzePrescriptionImageWithChatLLM(
+        req.file.path,
+        req.file.mimetype,
+        message
+      );
+      sendSuccess(res, result, 'Prescription analyzed directly with AI Multimodal Vision');
+    } catch (error) {
+      next(error);
+    }
+  }
+
   public static async uploadAndAnalyze(
     req: AuthenticatedRequest,
     res: Response,

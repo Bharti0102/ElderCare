@@ -1,20 +1,26 @@
 import { IOCRProvider } from './ocr.interface';
-import { MockOCRProvider } from './mock.ocr';
 import { GeminiVisionProvider } from './gemini.vision';
-import { env } from '../../config/env';
+import { OpenAIVisionProvider } from './openai.vision';
+import { GroqVisionProvider } from './groq.vision';
+import { TesseractOCRProvider } from './tesseract.ocr';
+import { AIConfigService } from '../../services/ai/ai-config.service';
 
 export class OCRFactory {
-  private static instance: IOCRProvider | null = null;
-
   public static getProvider(): IOCRProvider {
-    if (!this.instance) {
-      if (env.GEMINI_API_KEY) {
-        this.instance = new GeminiVisionProvider();
-      } else {
-        this.instance = new MockOCRProvider();
-      }
+    const active = AIConfigService.getActiveVisionProvider();
+
+    if (active === 'groq') {
+      return new GroqVisionProvider();
     }
-    return this.instance;
+    if (active === 'gemini') {
+      return new GeminiVisionProvider();
+    }
+    if (active === 'openai') {
+      return new OpenAIVisionProvider();
+    }
+
+    // Default to true local optical OCR engine
+    return new TesseractOCRProvider();
   }
 }
 

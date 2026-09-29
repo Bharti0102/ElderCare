@@ -12,7 +12,32 @@
 | **Phase 5** | Caregiver Calling (Calling Tool, Telephony Abstraction) | **Completed** | 2026-09-23 |
 | **Phase 6** | Hospital Calling + Appointment Assistance | **Completed** | 2026-09-23 |
 | **Phase 7** | Voice Pipeline (STT, TTS, Voice-first interaction) | **Completed** | 2026-09-23 |
+| **Extension** | WhatsApp-Style Direct Calling & Zero-Cost Web Push | **Completed** | 2026-09-23 |
+| **Extension** | ChatGPT-Style Companion UI & Dynamic Language Flexibility | **Completed** | 2026-09-23 |
 | **Phase 8** | Integration, Accessibility & Final Polish | **Next in Queue** | — |
+
+---
+
+## Extension: ChatGPT-Style Companion UI & Dynamic Language Flexibility
+- [x] Multi-session chat storage in `Conversation.ts` with auto-titling and indexed user lookup
+- [x] Session management REST endpoints: `GET /api/chat/sessions`, `POST /api/chat/sessions`, `DELETE /api/chat/sessions/:id`
+- [x] Dynamic language flexibility & fluid code-switching in `MultilingualLLMProvider` and `MockLLMProvider`
+- [x] Multi-language tag selector dropdown in UI: `Auto Detect 🌐`, `English`, `हिंदी (Hindi)`, `Hinglish`
+- [x] Responsive ChatGPT-style split layout with collapsible session sidebar on the left and recent message stream in the center
+- [x] Language-aware speech synthesis (automatically selects `hi-IN` for Hindi text and `en-US` for English)
+- [x] End-to-end automated verification script (`test-chatgpt-companion.mjs`) passing 100%
+
+---
+
+## Extension: WhatsApp-Style Direct Calling & Zero-Cost Web Push
+- [x] Independent W3C Web Push protocol (`PushService`) with persistent VAPID key exchange
+- [x] Push Subscription Mongoose model (`PushSubscription.ts`) storing device endpoints and keys per contact
+- [x] Service Worker (`sw.js`) displaying native OS-level alerts with vibration and 1-click answer
+- [x] Real-time Socket.IO incoming call signaling (`call:incoming`, `caregiver:register`, `call:decline`)
+- [x] Universal incoming call modal overlay (`IncomingCallModal.tsx`) with electronic telephone chime and Accept/Decline actions
+- [x] Caregiver Direct Connect onboarding portal (`CaregiverConnect.tsx`) at `/caregiver/connect/:contactId` with 1-tap activation & test ring
+- [x] Zero regressions on existing WebRTC architecture, SMS fallback, or `/call/join/:callId` public rooms
+- [x] End-to-end automated verification script (`test-push-calling.mjs`) passing 100%
 
 ---
 

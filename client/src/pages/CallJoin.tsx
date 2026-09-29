@@ -23,6 +23,7 @@ interface PublicCallInfo {
   relationship: string;
   status: string;
   startedAt: string;
+  activeCallId?: string | null;
 }
 
 export const CallJoin: React.FC = () => {
@@ -235,14 +236,34 @@ export const CallJoin: React.FC = () => {
                 Call Duration: {formatDuration(callDuration)}
               </p>
             )}
-            <div className="pt-3">
-              <button
-                onClick={() => window.close()}
-                className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold shadow-lg transition-colors"
-              >
-                Close Tab
-              </button>
-            </div>
+            {callInfo?.activeCallId ? (
+              <div className="pt-2 space-y-3">
+                <div className="p-4 rounded-2xl bg-emerald-950/80 border border-emerald-500/50 text-center space-y-2">
+                  <p className="text-emerald-300 font-bold text-sm">
+                    🔔 {callInfo.callerName} is calling again right now!
+                  </p>
+                  <p className="text-xs text-slate-300">
+                    A fresh call session has started. Tap below to join directly:
+                  </p>
+                  <a
+                    href={`/call/join/${callInfo.activeCallId}`}
+                    className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-sm shadow-lg shadow-emerald-500/30 transition-all active:scale-95"
+                  >
+                    <PhoneCall className="w-4 h-4" />
+                    <span>Join Active Call Now</span>
+                  </a>
+                </div>
+              </div>
+            ) : (
+              <div className="pt-3">
+                <button
+                  onClick={() => window.close()}
+                  className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold shadow-lg transition-colors"
+                >
+                  Close Tab
+                </button>
+              </div>
+            )}
           </div>
         ) : !hasJoined ? (
           /* Pre-Join Screen */

@@ -1,14 +1,12 @@
 import React from 'react';
-import { useOutletContext, Link } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import {
   ShieldCheck,
   PhoneCall,
   BellRing,
-  FileSpreadsheet,
   MessageCircleHeart,
   Users,
   Building2,
-  CheckCircle2,
   ArrowRight,
   Heart,
   Video,
@@ -17,45 +15,25 @@ import {
   Lock,
   Smartphone,
 } from 'lucide-react';
-import { HealthData } from '../types';
-
-interface ContextType {
-  health: HealthData | null;
-  serverStatus: 'online' | 'offline' | 'checking';
-  refetchHealth: () => void;
-}
 
 export const Dashboard: React.FC = () => {
-  const { health, serverStatus } = useOutletContext<ContextType>();
-
-  const isDbConnected = health?.database?.status === 'connected';
 
   const careModules = [
     {
       title: 'Family Video & Audio Calls',
-      badge: 'Live Gateway Active',
+      badge: 'Instant 1-Tap Connect',
       badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-      description: 'One-tap video and audio calls with your verified caregivers. Sends an instant SMS join link so family can join on their mobile in seconds.',
+      description: 'One-tap video and audio calls with your family and caregivers. Family members can join right from their phone without downloading any app.',
       icon: Video,
       color: 'from-emerald-500 to-teal-600',
       link: '/calls',
       actionText: 'Start Call',
     },
     {
-      title: 'Smart Prescription Scanner',
-      badge: 'AI Vision & 7-Point Safety',
-      badgeColor: 'bg-sky-50 text-sky-700 border-sky-200',
-      description: 'Scan or upload paper prescriptions. AI reads the doctor’s handwriting, explains why it was prescribed, food to avoid, and precautions in simple language.',
-      icon: FileSpreadsheet,
-      color: 'from-sky-500 to-blue-600',
-      link: '/prescription',
-      actionText: 'Scan Prescription',
-    },
-    {
       title: 'Daily Medication Reminders',
-      badge: 'Automated Voice & Alarms',
+      badge: 'Voice Alerts & Alarms',
       badgeColor: 'bg-indigo-50 text-indigo-700 border-indigo-200',
-      description: 'Never miss a pill or dosage. Set recurring schedules confirmed directly from your scanned prescriptions with sound alerts and spoken voice reminders.',
+      description: 'Never miss a pill or routine. Set gentle voice reminders and daily schedules tailored for senior wellness and safety.',
       icon: BellRing,
       color: 'from-indigo-500 to-purple-600',
       link: '/reminders',
@@ -63,35 +41,37 @@ export const Dashboard: React.FC = () => {
     },
     {
       title: 'Conversational AI Companion',
-      badge: 'Voice & Chat Enabled',
+      badge: 'Hindi, English & Regional',
       badgeColor: 'bg-rose-50 text-rose-700 border-rose-200',
-      description: 'A warm, empathetic AI companion ready to listen, chat about your day, answer general health queries, and schedule reminders by voice.',
+      description: 'A warm, friendly companion ready to talk in Hindi, Hinglish, or English, share stories, answer questions, and keep you company anytime.',
       icon: MessageCircleHeart,
       color: 'from-rose-500 to-pink-600',
       link: '/chat',
-      actionText: 'Speak with AI',
+      actionText: 'Talk with AI',
     },
     {
-      title: 'Doctor & Clinic Appointments',
-      badge: 'AI Scheduling Desk',
-      badgeColor: 'bg-amber-50 text-amber-800 border-amber-200',
-      description: 'Let our AI Assistant call the hospital front desk to check doctor availability, or dial clinic reception directly to book your consultation.',
-      icon: Building2,
-      color: 'from-amber-500 to-orange-600',
-      link: '/calls',
-      actionText: 'Book Visit',
-    },
-    {
-      title: 'Emergency Contacts & Profile',
-      badge: 'Verified & Encrypted',
+      title: 'Family & Caregiver Directory',
+      badge: 'Multiple Contacts & Categories',
       badgeColor: 'bg-slate-100 text-slate-700 border-slate-200',
-      description: 'Safeguard your designated emergency contacts, loved ones, primary caregiver assignment, and medical profile details.',
+      description: 'Organize your family loved ones, doctors, home nurses, and emergency SOS contacts into a categorized phonebook for quick reach.',
       icon: Users,
       color: 'from-slate-700 to-slate-900',
       link: '/profile',
-      actionText: 'Manage Contacts',
+      actionText: 'Manage Directory',
+    },
+    {
+      title: 'Doctor Appointments',
+      badge: 'Direct Phone & Truecaller',
+      badgeColor: 'bg-amber-50 text-amber-800 border-amber-200',
+      description: 'Connect directly with your clinic receptionists and doctors, and keep track of your consultation visits.',
+      icon: Building2,
+      color: 'from-amber-500 to-orange-600',
+      link: '/appointments',
+      actionText: 'Book Appointment',
     },
   ];
+
+
 
   return (
     <div className="space-y-10 animate-in fade-in duration-300">
@@ -100,16 +80,15 @@ export const Dashboard: React.FC = () => {
         <div className="relative z-10 max-w-3xl space-y-4">
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/15 backdrop-blur-md text-sky-100 text-xs font-bold tracking-wide border border-white/20">
             <ShieldCheck className="w-4 h-4 text-emerald-300" />
-            <span>Personal Health & Emergency Care Active</span>
+            <span>Senior Wellness & Family Connection Active</span>
           </div>
 
           <h1 className="text-3xl sm:text-5xl font-black tracking-tight leading-tight">
-            Welcome to ElderCare Assistant
+            Welcome to ElderCare
           </h1>
 
           <p className="text-base sm:text-lg text-sky-100 leading-relaxed font-normal max-w-2xl">
-            Your personal digital companion for daily medication reminders, AI prescription insights,
-            and immediate video connections with your loved ones.
+            Your personal companion for daily medication reminders, family video calls, and voice assistance in your own natural language.
           </p>
 
           {/* Quick-Launch Action Buttons */}
@@ -123,19 +102,19 @@ export const Dashboard: React.FC = () => {
             </Link>
 
             <Link
-              to="/prescription"
-              className="px-5 py-3 rounded-2xl bg-white/15 hover:bg-white/25 text-white font-bold text-sm flex items-center gap-2 border border-white/25 backdrop-blur-md transition-all active:scale-95"
-            >
-              <FileSpreadsheet className="w-4 h-4 text-sky-200" />
-              <span>Scan Prescription</span>
-            </Link>
-
-            <Link
               to="/reminders"
               className="px-5 py-3 rounded-2xl bg-white/15 hover:bg-white/25 text-white font-bold text-sm flex items-center gap-2 border border-white/25 backdrop-blur-md transition-all active:scale-95"
             >
               <Clock className="w-4 h-4 text-amber-200" />
-              <span>Medication Schedule</span>
+              <span>Daily Reminders</span>
+            </Link>
+
+            <Link
+              to="/chat"
+              className="px-5 py-3 rounded-2xl bg-white/15 hover:bg-white/25 text-white font-bold text-sm flex items-center gap-2 border border-white/25 backdrop-blur-md transition-all active:scale-95"
+            >
+              <MessageCircleHeart className="w-4 h-4 text-rose-200" />
+              <span>Talk with AI</span>
             </Link>
           </div>
         </div>
@@ -235,7 +214,7 @@ export const Dashboard: React.FC = () => {
         </div>
       </section>
 
-      {/* Reassuring System Health & Security Shield */}
+      {/* Privacy, Security & Family Protection Banner */}
       <section className="p-6 rounded-3xl bg-slate-900 text-white border border-slate-800 shadow-xl space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-800 gap-3">
           <div className="flex items-center gap-2.5">
@@ -243,43 +222,39 @@ export const Dashboard: React.FC = () => {
               <ShieldCheck className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-bold text-sm text-white">Platform Readiness & Privacy Shield</h3>
-              <p className="text-xs text-slate-400">All local health services and emergency lines operational</p>
+              <h3 className="font-bold text-sm text-white">Private & Secure Health Companion</h3>
+              <p className="text-xs text-slate-400">Encrypted health data, verified caregiver contacts, and emergency assistance</p>
             </div>
           </div>
 
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-950 text-emerald-300 text-xs font-bold border border-emerald-800/40">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span>Systems Online</span>
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-800 text-slate-300 text-xs font-semibold border border-slate-700">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+            <span>HIPAA Compliant Protection</span>
           </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
           <div className="p-3.5 rounded-2xl bg-slate-800/60 border border-slate-700/60 flex items-center gap-3">
-            <CheckCircle2 className="w-5 h-5 text-emerald-400 flex-shrink-0" />
+            <Lock className="w-5 h-5 text-indigo-400 flex-shrink-0" />
             <div>
-              <span className="text-slate-400 block font-medium">Core Health Server</span>
-              <span className="font-bold text-white text-sm">
-                {serverStatus === 'online' ? 'Connected & Healthy' : 'Offline'}
-              </span>
+              <span className="text-slate-400 block font-medium">Health Data Privacy</span>
+              <span className="font-bold text-white text-sm">256-Bit Encrypted</span>
             </div>
           </div>
 
           <div className="p-3.5 rounded-2xl bg-slate-800/60 border border-slate-700/60 flex items-center gap-3">
-            <Lock className="w-5 h-5 text-indigo-400 flex-shrink-0" />
+            <PhoneCall className="w-5 h-5 text-emerald-400 flex-shrink-0" />
             <div>
-              <span className="text-slate-400 block font-medium">Health Database</span>
-              <span className="font-bold text-white text-sm">
-                {isDbConnected ? 'Encrypted & Active' : 'Connecting...'}
-              </span>
+              <span className="text-slate-400 block font-medium">Emergency Assistance</span>
+              <span className="font-bold text-white text-sm">Direct SOS & 108 Dispatch</span>
             </div>
           </div>
 
           <div className="p-3.5 rounded-2xl bg-slate-800/60 border border-slate-700/60 flex items-center gap-3">
             <Smartphone className="w-5 h-5 text-amber-400 flex-shrink-0" />
             <div>
-              <span className="text-slate-400 block font-medium">Caregiver SMS Line</span>
-              <span className="font-bold text-white text-sm">Automated (+91 India Gateway)</span>
+              <span className="text-slate-400 block font-medium">Caregiver Alerts</span>
+              <span className="font-bold text-white text-sm">Instant Family SMS</span>
             </div>
           </div>
         </div>

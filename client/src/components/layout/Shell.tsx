@@ -19,7 +19,6 @@ export const Shell: React.FC = () => {
   const location = useLocation();
   const [health, setHealth] = useState<HealthData | null>(null);
   const [serverStatus, setServerStatus] = useState<'online' | 'offline' | 'checking'>('checking');
-  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
   // Global Due Reminders
   const [globalDue, setGlobalDue] = useState<Reminder[]>([]);
@@ -27,7 +26,6 @@ export const Shell: React.FC = () => {
   const lastAnnouncedDueRef = useRef<string>('');
 
   const fetchHealth = useCallback(async () => {
-    setIsRefreshing(true);
     try {
       const data = await getHealthStatus();
       setHealth(data);
@@ -36,8 +34,6 @@ export const Shell: React.FC = () => {
       console.warn('Backend health check error:', err);
       setServerStatus('offline');
       setHealth(null);
-    } finally {
-      setIsRefreshing(false);
     }
   }, []);
 
@@ -103,12 +99,7 @@ export const Shell: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900">
-      <Navbar
-        serverStatus={serverStatus}
-        databaseStatus={health?.database}
-        onRefreshHealth={fetchHealth}
-        isRefreshingHealth={isRefreshing}
-      />
+      <Navbar />
 
       {/* Persistent Global Due Reminders Voice Bar (shown when outside /reminders) */}
       {showGlobalBanner && (

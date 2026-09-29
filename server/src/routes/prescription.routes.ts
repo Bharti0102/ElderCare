@@ -13,6 +13,8 @@ router.post('/upload', prescriptionUpload.single('file'), PrescriptionController
 
 // Medicine information lookup & AI simple language explanation
 router.post('/lookup-medicine', PrescriptionController.lookupMedicine);
+router.post('/ai-chat', PrescriptionController.aiAssistantChat);
+router.post('/ai-chat-vision', prescriptionUpload.single('file'), PrescriptionController.aiAssistantVisionChat);
 
 // Prescription CRUD & Bridging
 router.get('/', PrescriptionController.getPrescriptions);

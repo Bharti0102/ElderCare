@@ -67,9 +67,9 @@ User input: "${userInput}"`;
     return this.fallback.classifyIntent(userInput);
   }
 
-  public async chat(messages: ChatMessage[], systemPrompt?: string): Promise<LLMResponse> {
+  public async chat(messages: ChatMessage[], systemPrompt?: string, language?: string): Promise<LLMResponse> {
     if (!this.apiKey) {
-      return this.fallback.chat(messages, systemPrompt);
+      return this.fallback.chat(messages, systemPrompt, language);
     }
 
     try {
